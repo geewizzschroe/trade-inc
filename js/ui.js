@@ -4,7 +4,7 @@ import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { MapView } from './map.js';
 
-export const BUILD = '0.2.0';
+export const BUILD = '0.2.1';
 
 const $ = sel => document.querySelector(sel);
 let content, state, buyMode = 1, map, lastFloatAt = 0;
@@ -249,6 +249,17 @@ function bindChrome() {
     if (!armed) { armed = true; reset.textContent = 'Tap again to erase everything'; setTimeout(() => { armed = false; reset.textContent = 'Reset game'; }, 3000); return; }
     S.clearSave(); state = E.createState(content); save(); resetCaches();
     armed = false; reset.textContent = 'Reset game'; menu.hidden = true;
+  });
+
+  onPress($('#update'), async () => {
+    const btn = $('#update');
+    btn.textContent = 'Updating…'; sfx.tap();
+    save();
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (reg) await reg.update();
+    } catch {}
+    location.reload();
   });
 
   onPress($('#away-ok'), (x, y) => { $('#away').hidden = true; burst(x, y, 16); sfx.coin(true); buzz(20); });
