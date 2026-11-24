@@ -2,11 +2,12 @@
 import * as E from './engine.js';
 import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
+import { MapView } from './map.js';
 
-export const BUILD = '0.1.0';
+export const BUILD = '0.2.0';
 
 const $ = sel => document.querySelector(sel);
-let content, state, buyMode = 1;
+let content, state, buyMode = 1, map, lastFloatAt = 0;
 const cards = {};
 
 export async function start() {
@@ -19,6 +20,11 @@ export async function start() {
 
   buildRoutes();
   bindChrome();
+  map = new MapView($('#map'), content, () => state);
+  onPress($('#map'), (x, y) => {
+    const id = map.hitTest(x, y);
+    if (id) tapRoute(id, x, y);
+  });
   catchUp((Date.now() - state.lastSeen) / 1000);
 
   let last = performance.now();
@@ -27,6 +33,7 @@ export async function start() {
     if (dt > 2) catchUp(dt); // tab was asleep
     else step(Math.max(0, dt));
     render();
+    map.draw(Math.min(dt, 0.1), now);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -63,33 +70,29 @@ function buildRoutes() {
   for (const def of content.routes) {
     const el = document.createElement('section');
     el.className = 'route';
+    const from = content.towns[def.from].name, to = content.towns[def.to].name;
     el.innerHTML = `
       <div class="lock">
         <div class="lock-icon">${def.icon}</div>
-        <div class="lock-text"><b>${def.good} route</b><span>${def.from} → ${def.to}</span></div>
+        <div class="lock-text"><b>${def.good} route</b><span>${from} → ${to}</span></div>
         <button class="btn unlock-btn"><span>Open route</span><b class="cost"></b></button>
       </div>
       <div class="live">
         <div class="row top">
           <div class="icon">${def.icon}</div>
-          <div class="title"><b>${def.good}</b><span>${def.from} → ${def.to}</span></div>
-          <div class="owned"><b class="n">0</b><span>caravans</span></div>
+          <div class="title"><b>${def.good} <i class="owned"><span class="n">0</span>🐫</i></b><span class="per"></span><span class="ms"></span></div>
+          <button class="btn hire-btn"><span class="hire-label">Hire</span><b class="cost"></b></button>
         </div>
         <button class="track" aria-label="Send ${def.good} caravan">
           <div class="fill"></div>
-          <div class="cart">🐫</div>
           <div class="track-label"></div>
         </button>
-        <div class="row bottom">
-          <div class="info"><span class="per"></span><span class="ms"></span></div>
-          <button class="btn hire-btn"><span class="hire-label">Hire</span><b class="cost"></b></button>
-        </div>
       </div>`;
     list.appendChild(el);
     const c = cards[def.id] = {
       el, def,
-      track: el.querySelector('.track'), fill: el.querySelector('.fill'), cart: el.querySelector('.cart'),
-      trackLabel: el.querySelector('.track-label'), owned: el.querySelector('.owned .n'),
+      track: el.querySelector('.track'), fill: el.querySelector('.fill'),
+      trackLabel: el.querySelector('.track-label'), owned: el.querySelector('.owned'), ownedN: el.querySelector('.owned .n'),
       per: el.querySelector('.per'), ms: el.querySelector('.ms'),
       hire: el.querySelector('.hire-btn'), hireLabel: el.querySelector('.hire-label'), hireCost: el.querySelector('.hire-btn .cost'),
       unlock: el.querySelector('.unlock-btn'), unlockCost: el.querySelector('.unlock-btn .cost'),
@@ -97,13 +100,7 @@ function buildRoutes() {
     };
     c.unlockCost.textContent = '🪙 ' + E.formatNumber(def.unlockCost);
 
-    onPress(c.track, (x, y) => {
-      const res = E.tap(content, state, def.id);
-      if (!res) return;
-      sfx.tap(); buzz(6);
-      pulse(c.track, 'squish');
-      floatText(x, y - 10, res === 'started' ? 'Go!' : '»', 'tap');
-    });
+    onPress(c.track, (x, y) => tapRoute(def.id, x, y));
     onPress(c.hire, (x, y) => {
       const n = hireCount(def);
       const before = state.routes[def.id].caravans;
@@ -127,6 +124,14 @@ function buildRoutes() {
   }
 }
 
+function tapRoute(id, x, y) {
+  const res = E.tap(content, state, id);
+  if (!res) return;
+  sfx.tap(); buzz(6);
+  pulse(cards[id].track, 'squish');
+  floatText(x, y - 10, res === 'started' ? 'Go!' : '»', 'tap');
+}
+
 function hireCount(def) {
   const rs = state.routes[def.id];
   if (buyMode === 'max') return E.maxAffordable(def, rs.caravans, state.coins);
@@ -142,13 +147,17 @@ function celebrateMilestone(c) {
 }
 
 function onArrive(ev) {
-  const c = cards[ev.routeId];
-  const r = c.track.getBoundingClientRect();
-  const manual = state.routes[ev.routeId].caravans === 0;
-  const fast = E.tripTime(content, c.def, state.routes[ev.routeId]) < 0.4;
-  const cx = r.left + r.width * (fast ? 0.5 + Math.random() * 0.4 : 0.85);
-  if (!fast || Math.random() < 0.15) floatText(cx, r.top + 6, '+' + E.formatNumber(ev.amount), 'coin');
-  if (manual) { burst(r.right - 20, r.top + r.height / 2, 5); buzz(15); }
+  const c = cards[ev.routeId], rs = state.routes[ev.routeId];
+  const manual = rs.caravans === 0;
+  const fast = E.tripTime(content, c.def, rs) < 0.4;
+  map.arrive(ev.routeId);
+  const now = performance.now();
+  if (!fast || now - lastFloatAt > 350) {
+    lastFloatAt = now;
+    const [lx, ly] = map.lanePagePos(ev.routeId, manual ? 1 : 0.55 + Math.random() * 0.35);
+    floatText(lx, ly - 10, '+' + E.formatNumber(ev.amount), 'coin');
+  }
+  if (manual) { const [tx, ty] = map.townPagePos(c.def.to); burst(tx, ty, 6); buzz(15); }
   sfx.coin(manual);
   pulse($('#coins'), 'bump');
 }
@@ -180,14 +189,13 @@ function render() {
     const fast = T < 0.4 && rs.caravans > 0;
     const p = fast ? 1 : rs.progress;
     c.fill.style.transform = `scaleX(${p})`;
-    c.cart.style.left = `calc(${p * 100}% - ${p * 28}px)`;
     c.track.classList.toggle('fast', fast);
     c.track.classList.toggle('idle', !rs.running);
     set(c, 'tl', c.trackLabel, 'textContent',
       !rs.running ? 'Tap to send · 🪙 ' + E.formatNumber(E.payoutPerTrip(def, rs))
       : '🪙 ' + E.formatNumber(E.payoutPerTrip(def, rs)) + ' · ' + E.formatTime(T));
-    set(c, 'own', c.owned, 'textContent', String(rs.caravans));
-    set(c, 'per', c.per, 'textContent', rs.caravans ? E.formatNumber(E.payoutPerTrip(def, rs) / T) + ' / sec' : 'Hire a caravan to automate');
+    set(c, 'own', c.ownedN, 'textContent', String(rs.caravans));
+    set(c, 'per', c.per, 'textContent', rs.caravans ? E.formatNumber(E.payoutPerTrip(def, rs) / T) + ' / sec' : 'Hire to automate');
     const nm = E.nextMilestone(content, rs.caravans);
     set(c, 'ms', c.ms, 'textContent', nm ? `Speed ×${content.milestoneSpeedMult} at ${nm}` : 'Max speed');
 

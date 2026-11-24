@@ -1,17 +1,32 @@
 {
-  "version": 1,
+  "version": 2,
   "currency": { "name": "Coins", "icon": "🪙" },
   "tapBoost": 0.12,
   "milestones": [10, 25, 50, 100, 150, 200, 300, 400],
   "milestoneSpeedMult": 2,
   "offlineCapHours": 24,
+  "map": {
+    "size": [1000, 1000],
+    "land": [[60,40],[420,20],[760,30],[980,60],[990,380],[940,520],[860,600],[780,700],[700,760],[640,880],[560,980],[300,990],[40,960],[20,600],[30,250]],
+    "hub": "crossroads"
+  },
+  "towns": {
+    "crossroads": { "name": "Crossroads", "x": 470, "y": 470 },
+    "farmstead":  { "name": "Farmstead",  "x": 360, "y": 560 },
+    "pinewood":   { "name": "Pinewood",   "x": 300, "y": 300 },
+    "highfold":   { "name": "Highfold",   "x": 650, "y": 260 },
+    "harbor":     { "name": "Harbor",     "x": 780, "y": 610 },
+    "vineyards":  { "name": "Vineyards",  "x": 150, "y": 720 },
+    "suncoast":   { "name": "Sun Coast",  "x": 600, "y": 880 },
+    "fareast":    { "name": "Far East",   "x": 930, "y": 110 }
+  },
   "routes": [
-    { "id": "grain",  "good": "Grain",  "icon": "🌾", "from": "Farmstead",  "to": "Village",    "unlockCost": 0,        "tripSeconds": 1.5, "payout": 1,      "caravanCost": 4,        "costGrowth": 1.07 },
-    { "id": "timber", "good": "Timber", "icon": "🪵", "from": "Pinewood",   "to": "Mill Town",  "unlockCost": 50,       "tripSeconds": 4,   "payout": 12,     "caravanCost": 60,       "costGrowth": 1.15 },
-    { "id": "wool",   "good": "Wool",   "icon": "🐑", "from": "Highfold",   "to": "Weaver's Row","unlockCost": 600,     "tripSeconds": 9,   "payout": 90,     "caravanCost": 700,      "costGrowth": 1.14 },
-    { "id": "salt",   "good": "Salt",   "icon": "🧂", "from": "Saltmarsh",  "to": "Harbor",     "unlockCost": 7000,     "tripSeconds": 20,  "payout": 700,    "caravanCost": 8000,     "costGrowth": 1.13 },
-    { "id": "wine",   "good": "Wine",   "icon": "🍷", "from": "Vineyards",  "to": "Capital",    "unlockCost": 90000,    "tripSeconds": 45,  "payout": 6000,   "caravanCost": 100000,   "costGrowth": 1.12 },
-    { "id": "spice",  "good": "Spice",  "icon": "🌶️", "from": "Sun Coast",  "to": "Grand Bazaar","unlockCost": 1000000, "tripSeconds": 100, "payout": 50000,  "caravanCost": 1200000,  "costGrowth": 1.11 },
-    { "id": "silk",   "good": "Silk",   "icon": "🧵", "from": "Far East",   "to": "Empire",     "unlockCost": 12000000, "tripSeconds": 240, "payout": 500000, "caravanCost": 15000000, "costGrowth": 1.10 }
+    { "id": "grain",  "good": "Grain",  "icon": "🌾", "color": "#f2d16b", "from": "farmstead", "to": "crossroads", "bend": 0.15,  "unlockCost": 0,        "tripSeconds": 1.5, "payout": 1,      "caravanCost": 4,        "costGrowth": 1.07 },
+    { "id": "timber", "good": "Timber", "icon": "🪵", "color": "#c98a4b", "from": "pinewood",  "to": "crossroads", "bend": -0.2,  "unlockCost": 50,       "tripSeconds": 4,   "payout": 12,     "caravanCost": 60,       "costGrowth": 1.15 },
+    { "id": "wool",   "good": "Wool",   "icon": "🐑", "color": "#f4f1ea", "from": "highfold",  "to": "crossroads", "bend": 0.2,   "unlockCost": 600,      "tripSeconds": 9,   "payout": 90,     "caravanCost": 700,      "costGrowth": 1.14 },
+    { "id": "salt",   "good": "Salt",   "icon": "🧂", "color": "#bfe3f2", "from": "harbor",    "to": "crossroads", "bend": -0.15, "unlockCost": 7000,     "tripSeconds": 20,  "payout": 700,    "caravanCost": 8000,     "costGrowth": 1.13 },
+    { "id": "wine",   "good": "Wine",   "icon": "🍷", "color": "#c2405a", "from": "vineyards", "to": "crossroads", "bend": 0.25,  "unlockCost": 90000,    "tripSeconds": 45,  "payout": 6000,   "caravanCost": 100000,   "costGrowth": 1.12 },
+    { "id": "spice",  "good": "Spice",  "icon": "🌶️", "color": "#ff7a2e", "from": "suncoast",  "to": "crossroads", "bend": -0.3,  "unlockCost": 1000000,  "tripSeconds": 100, "payout": 50000,  "caravanCost": 1200000,  "costGrowth": 1.11 },
+    { "id": "silk",   "good": "Silk",   "icon": "🧵", "color": "#c77dff", "from": "fareast",   "to": "crossroads", "bend": -0.2,  "unlockCost": 12000000, "tripSeconds": 240, "payout": 500000, "caravanCost": 15000000, "costGrowth": 1.10 }
   ]
 }
