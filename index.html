@@ -2,25 +2,54 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#1c344a">
 <title>Trade Inc</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
-<style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-       background:#1c344a;color:#f0e6d2;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}
-  small{opacity:.7}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main>
-  <h1>Trade Inc</h1>
-  <p>Placeholder. The game will appear here.</p>
-  <p><small>Build <span id="v"></span></small></p>
-</main>
-<script>
-  document.getElementById('v').textContent = '0.0.1';
+<header id="hud">
+  <button id="menu-btn" class="iconbtn" aria-label="Menu">☰</button>
+  <div id="coins"><span class="coin">🪙</span><b id="coins-n">0</b></div>
+  <button id="buymode" class="iconbtn pill">Buy ×1</button>
+  <div id="ips"></div>
+</header>
+
+<main id="routes"></main>
+
+<div id="menu" class="sheet" hidden>
+  <div class="panel">
+    <div class="panel-head"><b>Ledger</b><button id="menu-close" class="iconbtn" aria-label="Close">✕</button></div>
+    <div class="stats">
+      <div><span>Total earned</span><b id="stat-earned">0</b></div>
+      <div><span>Trips completed</span><b id="stat-trips">0</b></div>
+      <div><span>Taps</span><b id="stat-taps">0</b></div>
+    </div>
+    <label class="opt"><input type="checkbox" id="opt-sound"> Sound</label>
+    <label class="opt"><input type="checkbox" id="opt-haptics"> Vibration</label>
+    <h3>Save</h3>
+    <textarea id="save-box" rows="3" placeholder="Paste a save here to import it"></textarea>
+    <div class="btnrow"><button id="export" class="btn">Export</button><button id="import" class="btn">Import</button></div>
+    <p id="save-msg"></p>
+    <button id="reset" class="btn danger">Reset game</button>
+    <p class="small">Build <span id="build"></span></p>
+  </div>
+</div>
+
+<div id="away" class="sheet" hidden>
+  <div class="panel center">
+    <div class="big">🐫🐫🐫</div>
+    <p>While you were away for <b id="away-time"></b>, your caravans earned</p>
+    <div class="away-n">🪙 <b id="away-n"></b></div>
+    <button id="away-ok" class="btn afford">Collect</button>
+  </div>
+</div>
+
+<script type="module">
+  import { start } from './js/ui.js';
+  start();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
