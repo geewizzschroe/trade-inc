@@ -133,3 +133,4 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .tb.buy1.ok{background:linear-gradient(var(--green),#3fa55e);color:#06210f;box-shadow:0 3px 0 #2a6e3e}
 .tb.sell1.ok{background:linear-gradient(var(--gold),var(--gold2));color:#2b1d00;box-shadow:0 3px 0 #7a5100}
 .tcard .go{margin-top:10px}
+.nochips{color:var(--mute);font-size:12px;margin-top:6px}

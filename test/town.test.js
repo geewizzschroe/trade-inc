@@ -70,4 +70,11 @@ assert.equal(T.tradingAt(s6), 'market');
 assert.equal(T.tradeSell(cm, s6, 'apples', 1e9).coins, 12);
 T.requestStop(s6); T.tick(cm, s6, 0.05);
 assert.equal(s6.trip, null); assert.equal(s6.at, 'market');
+// standing orders upgrade: stops with orders trade by themselves
+const s7 = T.createState(cm); s7.coins = 200;
+T.buyUpgrade(cm, s7, 'orders'); assert.ok(T.ordersUnlocked(cm, s7));
+T.planAdd(cm, s7, 'farm'); T.toggleOrder(cm, s7, 0, 'apples'); T.planAdd(cm, s7, 'market'); T.toggleOrder(cm, s7, 1, 'apples');
+T.startTrip(s7); const c0 = s7.coins;
+T.applyOffline(cm, s7, 300);
+assert.ok(s7.coins > c0, 'orders loop earns offline'); assert.ok(!s7.trip.waiting);
 console.log('town tests passed');

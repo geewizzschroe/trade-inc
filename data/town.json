@@ -27,6 +27,7 @@
   "upgrades": [
     { "id": "pack",  "name": "Bigger pack",  "icon": "🎒", "cost": 25,  "desc": "Carry 5 goods instead of 3.", "capacity": 5 },
     { "id": "boots", "name": "Sturdy boots", "icon": "🥾", "cost": 40,  "desc": "Walk 30% faster.", "speed": 1.3 },
+    { "id": "orders", "name": "Standing orders", "icon": "📜", "cost": 100, "desc": "Set what to buy and sell at each stop. The merchant trades on their own and keeps earning while you're away.", "orders": true },
     { "id": "cart",  "name": "Cart",         "icon": "🛒", "cost": 150, "desc": "Carry 15 goods.", "capacity": 15 },
     { "id": "horse", "name": "Horse",        "icon": "🐎", "cost": 500, "desc": "Travel beyond this town.", "unlocksLand": true }
   ],

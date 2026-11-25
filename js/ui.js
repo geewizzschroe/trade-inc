@@ -4,7 +4,7 @@ import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 
-export const BUILD = '0.4.0';
+export const BUILD = '0.5.0';
 
 const $ = sel => document.querySelector(sel);
 let c, s, map;
@@ -100,7 +100,7 @@ function handle(events) {
   for (const ev of events) {
     if (ev.type === 'arrive') {
       map.poke(ev.b); buzz(8);
-      if (c.stopMode === 'manual') { sfx.unlock(); $('#panel').scrollTo({ top: 0, behavior: 'smooth' }); }
+      if (s.trip?.waiting) { sfx.unlock(); $('#panel').scrollTo({ top: 0, behavior: 'smooth' }); }
     }
     else if (ev.type === 'sell') {
       const [x, y] = map.buildingPagePos(ev.b);
@@ -182,7 +182,7 @@ function render() {
   if ($('#bag').dataset.k !== bagHtml) { $('#bag').dataset.k = bagHtml; $('#bag').innerHTML = bagHtml; }
 
   // plan rows (rebuilt only when something visible changed)
-  const key = JSON.stringify([s.plan, s.trip?.idx ?? -1, !!s.trip, s.plan.map(st => prices(st.b))]);
+  const key = JSON.stringify([s.plan, s.trip?.idx ?? -1, !!s.trip, s.plan.map(st => prices(st.b)), T.ordersUnlocked(c, s)]);
   if (key !== planKey) { planKey = key; renderPlan(); }
 
   const tk = JSON.stringify([T.tradingAt(s), s.trip?.waiting, s.inv, s.coins, T.capacity(c, s)]);
@@ -234,7 +234,7 @@ function renderPlan() {
   const el = $('#plan');
   if (!s.plan.length) {
     el.innerHTML = `<p class="hint">Tap buildings on the map in the order you want to visit them, or drag your finger through them.
-      ${c.stopMode === 'manual' ? 'The merchant will stop at each one so you can trade.' : 'Then pick what to buy or sell at each stop.'}</p>`;
+      ${T.ordersUnlocked(c, s) ? 'Then pick what to buy or sell at each stop. Stops with no orders wait for you to trade by hand.' : 'The merchant will stop at each one so you can trade.'}</p>`;
     return;
   }
   el.innerHTML = s.plan.map((st, i) => {
@@ -245,7 +245,7 @@ function renderPlan() {
     for (const g in d.buys) chips.push(chip(i, g, 'sell', T.sellPrice(c, s, st.b, g), st.orders[g] === 'sell'));
     return `<div class="stop ${state}">
       <div class="stop-head"><b class="num">${i + 1}</b><span>${d.icon} ${d.name}</span>${s.trip ? '' : `<button class="rm" data-rm="${i}" aria-label="Remove stop">✕</button>`}</div>
-      ${c.stopMode === 'manual' ? '' : `<div class="chips">${chips.join('')}</div>`}</div>`;
+      ${T.ordersUnlocked(c, s) ? `<div class="chips">${chips.join('')}</div>${Object.keys(st.orders).length ? '' : '<div class="nochips">No orders: the merchant waits here for you.</div>'}` : ''}</div>`;
   }).join('');
 }
 

@@ -60,7 +60,7 @@ export function planAdd(c, s, b) {
   const last = s.plan.length ? s.plan[s.plan.length - 1].b : s.at;
   if (last === b) return false;
   const orders = {};
-  for (const g in c.buildings[b].buys) orders[g] = 'sell'; // default: sell what this place buys
+  if (c.stopMode !== 'manual') for (const g in c.buildings[b].buys) orders[g] = 'sell'; // default: sell what this place buys
   s.plan.push({ b, orders });
   return true;
 }
@@ -136,7 +136,7 @@ export function tick(c, s, dt) {
 function arrive(c, s, ev) {
   const st = s.plan[s.trip.idx];
   ev.push({ type: 'arrive', b: st.b });
-  if (c.stopMode === 'manual') { s.trip.waiting = true; return; }
+  if (!autoTrades(c, s, st)) { s.trip.waiting = true; return; }
   // Sell first, so the coins can pay for buying.
   for (const g in st.orders) if (st.orders[g] === 'sell') {
     let n = 0, got = 0;
@@ -211,6 +211,15 @@ function unlockAch(s, id, ev) {
   if (s.achievements[id]) return;
   s.achievements[id] = Date.now();
   ev.push({ type: 'achievement', id });
+}
+
+// Whether standing orders are available (always in 'orders' mode, or after the upgrade).
+export function ordersUnlocked(c, s) {
+  return c.stopMode !== 'manual' || c.upgrades.some(u => u.orders && s.upgrades[u.id]);
+}
+// A stop trades by itself when orders are unlocked and it has at least one order.
+export function autoTrades(c, s, st) {
+  return c.stopMode !== 'manual' || (ordersUnlocked(c, s) && Object.keys(st.orders).length > 0);
 }
 
 // ---------- trading by hand ----------
