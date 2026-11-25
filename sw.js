@@ -1,6 +1,6 @@
 // Network-first, bypassing the browser's HTTP cache so a new deploy shows up on the next open.
 // Falls back to the last copy we saved when offline.
-const CACHE = 'trade-inc-v2';
+const CACHE = 'trade-inc-v3';
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))

@@ -1,0 +1,453 @@
+{
+ "version": 2,
+ "startCoins": 5,
+ "startTown": "millbrook",
+ "startAt": "market",
+ "baseCapacity": 3,
+ "walkSpeed": 140,
+ "rideSpeed": 28,
+ "dayLength": 6,
+ "hurryDistance": 28,
+ "landHurry": 7,
+ "offlineCapHours": 8,
+ "prices": {
+  "mode": "fixed",
+  "estimate": "untilVisited",
+  "estimateSpread": 0.25
+ },
+ "routeMode": "loop",
+ "stopMode": "manual",
+ "goods": {
+  "apples": {
+   "name": "Apples",
+   "icon": "🍎"
+  },
+  "wheat": {
+   "name": "Wheat",
+   "icon": "🌾"
+  },
+  "bread": {
+   "name": "Bread",
+   "icon": "🍞"
+  },
+  "milk": {
+   "name": "Milk",
+   "icon": "🥛"
+  },
+  "cheese": {
+   "name": "Cheese",
+   "icon": "🧀"
+  },
+  "wool": {
+   "name": "Wool",
+   "icon": "🧶"
+  },
+  "cloth": {
+   "name": "Cloth",
+   "icon": "👘"
+  },
+  "iron": {
+   "name": "Iron",
+   "icon": "🪨"
+  },
+  "tools": {
+   "name": "Tools",
+   "icon": "🔨"
+  },
+  "fish": {
+   "name": "Fish",
+   "icon": "🐟"
+  },
+  "salt": {
+   "name": "Salt",
+   "icon": "🧂"
+  },
+  "wine": {
+   "name": "Wine",
+   "icon": "🍷"
+  }
+ },
+ "towns": {
+  "millbrook": {
+   "name": "Millbrook",
+   "icon": "🌾",
+   "x": 330,
+   "y": 520,
+   "buildings": {
+    "market": {
+     "name": "Market",
+     "icon": "🏛️",
+     "x": 500,
+     "y": 500,
+     "color": "#b89a6a",
+     "buys": {
+      "apples": 4,
+      "bread": 9,
+      "cheese": 14
+     },
+     "sells": {}
+    },
+    "farm": {
+     "name": "Farm",
+     "icon": "🐄",
+     "x": 190,
+     "y": 200,
+     "color": "#8a6a3b",
+     "buys": {
+      "bread": 7
+     },
+     "sells": {
+      "apples": 1,
+      "wheat": 2,
+      "milk": 3
+     }
+    },
+    "bakery": {
+     "name": "Bakery",
+     "icon": "🥖",
+     "x": 810,
+     "y": 230,
+     "color": "#c0703a",
+     "buys": {
+      "wheat": 4
+     },
+     "sells": {
+      "bread": 6
+     }
+    },
+    "dairy": {
+     "name": "Dairy",
+     "icon": "🪣",
+     "x": 200,
+     "y": 790,
+     "color": "#6f8fa8",
+     "buys": {
+      "milk": 6
+     },
+     "sells": {
+      "cheese": 10
+     }
+    },
+    "tavern": {
+     "name": "Tavern",
+     "icon": "🍺",
+     "x": 800,
+     "y": 780,
+     "color": "#8c4a4a",
+     "buys": {
+      "apples": 4,
+      "bread": 10,
+      "cheese": 15
+     },
+     "sells": {}
+    }
+   }
+  },
+  "highfold": {
+   "name": "Highfold",
+   "icon": "🐑",
+   "x": 170,
+   "y": 240,
+   "buildings": {
+    "inn": {
+     "name": "Inn",
+     "icon": "🛏️",
+     "x": 500,
+     "y": 500,
+     "color": "#8c4a4a",
+     "buys": {
+      "bread": 14,
+      "cheese": 20,
+      "apples": 6,
+      "fish": 11
+     },
+     "sells": {}
+    },
+    "fold": {
+     "name": "Sheepfold",
+     "icon": "🐑",
+     "x": 200,
+     "y": 230,
+     "color": "#8a7a5b",
+     "buys": {},
+     "sells": {
+      "wool": 3
+     }
+    },
+    "weaver": {
+     "name": "Weaver",
+     "icon": "🧵",
+     "x": 800,
+     "y": 230,
+     "color": "#7a5a8a",
+     "buys": {
+      "wool": 7
+     },
+     "sells": {
+      "cloth": 14
+     }
+    }
+   }
+  },
+  "ironridge": {
+   "name": "Ironridge",
+   "icon": "⛏️",
+   "x": 520,
+   "y": 160,
+   "buildings": {
+    "canteen": {
+     "name": "Canteen",
+     "icon": "🍲",
+     "x": 500,
+     "y": 500,
+     "color": "#8c4a4a",
+     "buys": {
+      "bread": 16,
+      "cheese": 24,
+      "fish": 14,
+      "salt": 11
+     },
+     "sells": {}
+    },
+    "mine": {
+     "name": "Mine",
+     "icon": "⛏️",
+     "x": 200,
+     "y": 230,
+     "color": "#5a5a66",
+     "buys": {
+      "tools": 28
+     },
+     "sells": {
+      "iron": 5
+     }
+    },
+    "smithy": {
+     "name": "Smithy",
+     "icon": "⚒️",
+     "x": 800,
+     "y": 230,
+     "color": "#6b4a3a",
+     "buys": {
+      "iron": 10
+     },
+     "sells": {
+      "tools": 22
+     }
+    }
+   }
+  },
+  "saltmere": {
+   "name": "Saltmere",
+   "icon": "⚓",
+   "x": 210,
+   "y": 840,
+   "buildings": {
+    "harbor": {
+     "name": "Harbor",
+     "icon": "⚓",
+     "x": 500,
+     "y": 500,
+     "color": "#4a6a8c",
+     "buys": {
+      "cloth": 24,
+      "tools": 34,
+      "wine": 18,
+      "cheese": 18,
+      "apples": 5
+     },
+     "sells": {}
+    },
+    "fishery": {
+     "name": "Fishery",
+     "icon": "🐟",
+     "x": 200,
+     "y": 230,
+     "color": "#4a7a8c",
+     "buys": {},
+     "sells": {
+      "fish": 3
+     }
+    },
+    "saltworks": {
+     "name": "Saltworks",
+     "icon": "🧂",
+     "x": 800,
+     "y": 230,
+     "color": "#9aa4ad",
+     "buys": {},
+     "sells": {
+      "salt": 3
+     }
+    }
+   }
+  },
+  "vinehollow": {
+   "name": "Vinehollow",
+   "icon": "🍇",
+   "x": 620,
+   "y": 600,
+   "buildings": {
+    "store": {
+     "name": "General store",
+     "icon": "🏪",
+     "x": 500,
+     "y": 500,
+     "color": "#8a6a3b",
+     "buys": {
+      "tools": 36,
+      "salt": 9,
+      "cloth": 22,
+      "fish": 9,
+      "bread": 11
+     },
+     "sells": {}
+    },
+    "vineyard": {
+     "name": "Vineyard",
+     "icon": "🍇",
+     "x": 200,
+     "y": 230,
+     "color": "#6a3a5a",
+     "buys": {},
+     "sells": {
+      "wine": 8
+     }
+    },
+    "orchard": {
+     "name": "Orchard",
+     "icon": "🍎",
+     "x": 800,
+     "y": 230,
+     "color": "#5a7a3a",
+     "buys": {},
+     "sells": {
+      "apples": 1
+     }
+    }
+   }
+  },
+  "kingsport": {
+   "name": "Kingsport",
+   "icon": "👑",
+   "x": 860,
+   "y": 360,
+   "buildings": {
+    "grand": {
+     "name": "Grand market",
+     "icon": "👑",
+     "x": 500,
+     "y": 500,
+     "color": "#b89a6a",
+     "buys": {
+      "wine": 26,
+      "cloth": 30,
+      "tools": 45,
+      "cheese": 25,
+      "salt": 12
+     },
+     "sells": {}
+    },
+    "docks": {
+     "name": "Docks",
+     "icon": "🚢",
+     "x": 200,
+     "y": 230,
+     "color": "#4a6a8c",
+     "buys": {
+      "fish": 8
+     },
+     "sells": {
+      "salt": 6
+     }
+    },
+    "palace": {
+     "name": "Palace kitchens",
+     "icon": "🏰",
+     "x": 800,
+     "y": 230,
+     "color": "#7a6a8a",
+     "buys": {
+      "wine": 30,
+      "bread": 18
+     },
+     "sells": {}
+    }
+   }
+  }
+ },
+ "upgrades": [
+  {
+   "id": "pack",
+   "name": "Bigger pack",
+   "icon": "🎒",
+   "cost": 25,
+   "desc": "Carry 5 goods instead of 3.",
+   "capacity": 5
+  },
+  {
+   "id": "boots",
+   "name": "Sturdy boots",
+   "icon": "🥾",
+   "cost": 40,
+   "desc": "Walk 30% faster.",
+   "speed": 1.3
+  },
+  {
+   "id": "orders",
+   "name": "Standing orders",
+   "icon": "📜",
+   "cost": 100,
+   "desc": "Set what to buy and sell at each stop. The merchant trades on their own and keeps earning while you're away.",
+   "orders": true
+  },
+  {
+   "id": "cart",
+   "name": "Cart",
+   "icon": "🛒",
+   "cost": 150,
+   "desc": "Carry 15 goods.",
+   "capacity": 15
+  },
+  {
+   "id": "horse",
+   "name": "Horse",
+   "icon": "🐎",
+   "cost": 500,
+   "desc": "Ride between towns. Opens the land map.",
+   "unlocksLand": true
+  },
+  {
+   "id": "swift",
+   "name": "Swift horse",
+   "icon": "🐎",
+   "cost": 800,
+   "desc": "Ride 40% faster between towns.",
+   "rideSpeed": 1.4,
+   "needs": "horse"
+  },
+  {
+   "id": "wagon",
+   "name": "Wagon",
+   "icon": "🚚",
+   "cost": 1500,
+   "desc": "Carry 40 goods.",
+   "capacity": 40,
+   "needs": "horse"
+  }
+ ],
+ "achievements": {
+  "firstProfit": {
+   "name": "First Coin Made",
+   "desc": "Finished a route with more coins than you started."
+  },
+  "horseBeforeCart": {
+   "name": "Horse Before Cart",
+   "desc": "Bought the horse before the cart."
+  },
+  "firstTown": {
+   "name": "Over the Hills",
+   "desc": "Visited another town."
+  }
+ }
+}
