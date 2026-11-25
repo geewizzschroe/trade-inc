@@ -261,11 +261,12 @@ export function startTrip(c, s, level) {
 
 // Walk straight to one building in town, no loop. The planned route is kept
 // aside and comes back on arrival.
-export function goTo(c, s, id) {
-  const r = route(s, 'town');
-  if (!canPlan(c, s, 'town') || s.land.trip || r.at === id || !nodes(c, s, 'town')[id]) return false;
+export function goTo(c, s, id, level = 'town') {
+  const r = route(s, level);
+  const here = level === 'land' ? s.town ?? r.at : r.at;
+  if (!r || isHire(level) || !canPlan(c, s, level) || (level === 'town' && s.land.trip) || here === id || !nodes(c, s, level)[id]) return false;
   r.saved = r.plan; r.plan = [{ b: id, orders: {} }];
-  if (!startTrip(c, s, 'town')) { r.plan = r.saved; delete r.saved; return false; }
+  if (!startTrip(c, s, level)) { r.plan = r.saved; delete r.saved; return false; }
   r.trip.once = true;
   return true;
 }
@@ -337,7 +338,6 @@ function tickRoute(c, s, level, dt, ev) {
 
 function arrive(c, s, level, ev) {
   const r = route(s, level), st = r.plan[r.trip.idx], auto = autoTrades(c, s, st, level);
-  if (r.trip.once) { ev.push({ type: 'arrive', level, b: st.b, auto: false }); endTrip(c, s, level, st.b); return; }
   if (isHire(level)) {
     s.visited[st.b] = true;
     ev.push({ type: 'arrive', level, b: st.b, auto: true });
@@ -350,6 +350,7 @@ function arrive(c, s, level, ev) {
     ensureLocal(c, s, st.b);
     if (!s.visited[st.b]) { s.visited[st.b] = true; if (st.b !== c.startTown) unlockAch(s, 'firstTown', ev); }
   }
+  if (r.trip.once) { ev.push({ type: 'arrive', level, b: st.b, auto: false }); endTrip(c, s, level, st.b); return; }
   // While the app is closed, stops without orders are passed by.
   if (s._offline && !auto) { advance(c, s, level, ev); return; }
   ev.push({ type: 'arrive', level, b: st.b, auto });

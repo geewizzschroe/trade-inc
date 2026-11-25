@@ -19,16 +19,17 @@
 <div id="map-wrap"><canvas id="map"></canvas><button id="view-btn" class="view-btn" hidden></button></div>
 
 <main id="panel">
-  <section id="trade" class="sec" hidden></section>
-  <section id="info" class="sec" hidden></section>
-  <section class="sec">
+  <nav id="tabs"><button data-tab="route" class="on">Route</button><button data-tab="ups">Upgrades<i id="up-badge" hidden></i></button><button data-tab="hires" hidden>Merchants</button></nav>
+  <section id="trade" class="sec" data-pane="route" hidden></section>
+  <section id="info" class="sec" data-pane="route" hidden></section>
+  <section class="sec" data-pane="route">
     <div class="sec-head"><b><span id="route-title">Route</span> <span id="loop-time" class="loop-time"></span></b><button id="clear" class="link">Clear</button></div>
     <div id="plan"></div>
     <p id="walk-hint" class="hint center-hint" hidden>Walking the route on repeat. Tap the map to hurry!</p>
     <button id="go" class="btn go">Plan a route first</button>
   </section>
-  <section id="hires" class="sec" hidden></section>
-  <section class="sec">
+  <section id="hires" class="sec" data-pane="hires" hidden></section>
+  <section class="sec" data-pane="ups">
     <div class="sec-head"><b>Upgrades</b></div>
     <div id="upgrades"></div>
   </section>

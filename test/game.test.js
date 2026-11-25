@@ -168,3 +168,10 @@ console.log('game tests passed');
   assert.equal(s.hires[0].inv.wine, 40);
   console.log('rework tests passed');
 }
+{
+  const s = G.createState(c); s.upgrades.horse = true;
+  assert.ok(G.goTo(c, s, 'kingsport', 'land'));
+  for (let t = 0; t < 120 && G.activeLevel(s); t += 0.05) G.tick(c, s, 0.05);
+  assert.equal(s.town, 'kingsport'); assert.equal(s.land.plan.length, 0); assert.ok(s.visited.kingsport);
+  console.log('land goto passed');
+}

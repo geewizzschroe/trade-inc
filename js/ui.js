@@ -5,10 +5,11 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.10.0';
+export const BUILD = '0.10.1';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
+let tab = 'route';
 let planKey = '', upKey = '', tradeKey = '', infoKey = '', hireKey = '';
 
 const view = () => s.view;            // 'town' | 'land'
@@ -161,9 +162,25 @@ function tapNode(id) {
     addStop(id); return;
   }
   if (id === s.town && !G.activeLevel(s) && !editing) { setView('town'); return; }
+  showTab('route');
+  // Same as buildings: a tap adds the town to the route (and shows its card);
+  // tapping the only planned town again rides straight there.
+  if (!editing && rideTo(id)) return;
   selected = id; maps.land.selected = id; infoKey = '';
   $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
-  sfx.tap(); buzz(4); map().poke(id);
+  if (!addStop(id)) { sfx.tap(); buzz(4); map().poke(id); }
+}
+function rideTo(id) {
+  const r = G.route(s, 'land');
+  if (r.trip || r.plan.length !== 1 || r.plan[0].b !== id) return false;
+  const plan = r.plan; r.plan = [];
+  if (G.goTo(c, s, id, 'land')) { sfx.unlock(); buzz(10); map().poke(id); selected = null; maps.land.selected = null; infoKey = ''; return true; }
+  r.plan = plan; return false;
+}
+function showTab(t) {
+  tab = t;
+  document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  document.querySelectorAll('[data-pane]').forEach(el => el.classList.toggle('pane-off', el.dataset.pane !== t));
 }
 
 function addStop(id) {
@@ -220,6 +237,8 @@ function showAchievement(id) {
 // ---------- panel ----------
 
 function bindPanel() {
+  showTab('route');
+  $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { showTab(b.dataset.tab); sfx.tap(); buzz(4); $('#panel').scrollTo({ top: 0 }); } });
   onPress($('#view-btn'), () => setView(s.view === 'town' ? 'land' : 'town'));
   onPress($('#go'), () => {
     if (editing) {
@@ -270,6 +289,7 @@ function bindPanel() {
   $('#info').addEventListener('pointerdown', e => {
     const btn = e.target.closest('[data-info]'); if (!btn) return;
     e.preventDefault();
+    if (btn.dataset.info === 'ride') { rideTo(selected); return; }
     if (btn.dataset.info === 'add') { if (!addStop(selected)) { sfx.deny(); pulse(btn, 'shake'); } }
     else if (btn.dataset.info === 'enter') setView('town');
     else { selected = null; maps.land.selected = null; infoKey = ''; sfx.tap(); }
@@ -368,7 +388,7 @@ function renderPlan() {
   if (!r) { el.innerHTML = ''; return; }
   if (!r.plan.length) {
     el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders or instructions, so give each stop some.' : L === 'land'
-      ? 'Tap a town to see what it buys and sells, then add it to your route. You can also drag your finger through towns. Tap the town you are in to go back into it.'
+      ? 'Tap a town to add it to your route and see its prices. Tap the same town again to ride straight there, or tap others to build a loop. Tap the town you are in to go back into it.'
       : 'Tap a building twice to walk straight there. To plan a loop, tap buildings in the order you want to visit them, or drag your finger through them.'}
       ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant waits at each stop until you tap Walk on.'}</p>`;
     return;
@@ -495,12 +515,13 @@ function setEditing(lv) {
   editing = lv; maps.land.editing = lv;
   planKey = hireKey = infoKey = '';
   if (lv && s.view !== 'land') setView('land');
-  if (lv) $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
+  if (lv) { showTab('route'); $('#panel').scrollTo({ top: 0, behavior: 'smooth' }); }
 }
 
 function renderHires() {
   const el = $('#hires'), m = G.management(c, s);
-  if (!m.level) { el.hidden = true; el.innerHTML = ''; return; }
+  $('#tabs [data-tab=hires]').hidden = !m.level;
+  if (!m.level) { el.hidden = true; el.innerHTML = ''; if (tab === 'hires') showTab('route'); return; }
   el.hidden = false;
   const cards = s.hires.map(h => {
     const lv = 'hire:' + h.id, r = h.route, tr = r.trip;
@@ -530,7 +551,8 @@ function renderInfo() {
   for (const g in m.sells) rows.push(`<span class="ig buy">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'buy'), g)}</span>`);
   const sells = [];
   for (const g in m.buys) sells.push(`<span class="ig sell">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'sell'), g)}</span>`);
-  const exact = !!s.visited[selected];
+  const exact = !!s.visited[selected], lr = G.route(s, 'land');
+  const rideOnly = !editing && !lr.trip && lr.plan.length === 1 && lr.plan[0].b === selected;
   const here = selected === s.town;
   el.innerHTML = `<div class="tcard info">
     <div class="stop-head"><span>${t.icon} ${t.name}</span><button class="rm" data-info="close" aria-label="Close">✕</button></div>
@@ -538,7 +560,8 @@ function renderInfo() {
     <div class="irow"><b>Sells to you</b>${rows.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="irow"><b>Buys from you</b>${sells.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="btnrow">${here && !G.activeLevel(s) ? '<button class="btn" data-info="enter">Enter town</button>' : ''}
-      <button class="btn ${G.canPlan(c, s, planLevel()) ? 'afford' : ''}" data-info="add">${editing ? `Add to ${G.hireOf(s, editing).name}'s route` : 'Add to route'}</button></div></div>`;
+      ${rideOnly ? '<button class="btn afford" data-info="ride">Ride straight there ▶</button>'
+        : `<button class="btn ${G.canPlan(c, s, planLevel()) ? 'afford' : ''}" data-info="add">${editing ? `Add to ${G.hireOf(s, editing).name}'s route` : 'Add to route'}</button>`}</div></div>`;
 }
 
 function renderUpgrades() {
@@ -547,7 +570,10 @@ function renderUpgrades() {
   const ownedNeeds = new Set(c.upgrades.filter(u => s.upgrades[u.id]).flatMap(u => [].concat(u.needs || [])));
   const outgrown = u => s.upgrades[u.id] ? ownedNeeds.has(u.id) && !u.unlocksLand && !u.orders && !u.management
     : (u.capacity && u.capacity <= G.capacity(c, s));
-  $('#upgrades').innerHTML = c.upgrades.filter(u => G.upgradeVisible(c, s, u) && !outgrown(u)).map(u => {
+  const list = c.upgrades.filter(u => G.upgradeVisible(c, s, u) && !outgrown(u));
+  const n = list.filter(u => !s.upgrades[u.id] && s.coins >= u.cost).length, badge = $('#up-badge');
+  badge.hidden = !n; badge.textContent = n;
+  $('#upgrades').innerHTML = [...list.filter(u => !s.upgrades[u.id]), ...list.filter(u => s.upgrades[u.id])].map(u => {
     const owned = s.upgrades[u.id];
     return `<div class="up ${owned ? 'owned' : ''}">
       <div class="up-icon">${u.icon}</div>
