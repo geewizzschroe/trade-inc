@@ -177,3 +177,8 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .palette{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .padd{border:0;border-radius:999px;padding:6px 10px;color:#fff;font-weight:700;font-size:12px;opacity:.9}
 .padd.p-sell{background:#7a5a1e}.padd.p-buy{background:#2f6b45}.padd.p-spend{background:#2d5e78}.padd.p-wait{background:#5b4a85}.padd.p-if{background:#8a3f5a}
+
+.otag{display:block;font-size:11px;font-weight:700;color:#6fd3e8;font-style:normal}
+.otag.off{color:var(--mute);text-decoration:line-through}
+.onote{margin:6px 0;font-size:13px;color:#6fd3e8;font-weight:600}
+.onote.off{color:var(--mute)}

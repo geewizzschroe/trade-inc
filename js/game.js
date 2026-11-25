@@ -216,6 +216,17 @@ export function startTrip(c, s, level) {
   return true;
 }
 
+// Walk straight to one building in town, no loop. The planned route is kept
+// aside and comes back on arrival.
+export function goTo(c, s, id) {
+  const r = route(s, 'town');
+  if (!canPlan(c, s, 'town') || s.land.trip || r.at === id || !nodes(c, s, 'town')[id]) return false;
+  r.saved = r.plan; r.plan = [{ b: id, orders: {} }];
+  if (!startTrip(c, s, 'town')) { r.plan = r.saved; delete r.saved; return false; }
+  r.trip.once = true;
+  return true;
+}
+
 function legEnds(c, s, level) {
   const r = route(s, level), tr = r.trip, N = nodes(c, s, level);
   const from = tr.idx === 0 ? N[tr.from] : N[r.plan[tr.idx - 1].b];
@@ -283,6 +294,7 @@ function tickRoute(c, s, level, dt, ev) {
 
 function arrive(c, s, level, ev) {
   const r = route(s, level), st = r.plan[r.trip.idx], auto = autoTrades(c, s, st, level);
+  if (r.trip.once) { ev.push({ type: 'arrive', level, b: st.b, auto: false }); endTrip(c, s, level, st.b); return; }
   if (isHire(level)) {
     s.visited[st.b] = true;
     ev.push({ type: 'arrive', level, b: st.b, auto: true });
@@ -342,8 +354,10 @@ function advance(c, s, level, ev) {
 
 function endTrip(c, s, level, at) {
   const r = route(s, level);
+  const once = r.trip?.once;
   r.trip = null; r.at = at;
-  if (!isHire(level)) s.stats.trips++;
+  if (r.saved) { r.plan = r.saved; delete r.saved; }
+  if (!isHire(level) && !once) s.stats.trips++;
   if (level === 'land') { s.town = at; ensureLocal(c, s, at); }
 }
 

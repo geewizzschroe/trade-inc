@@ -5,7 +5,7 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.9.0';
+export const BUILD = '0.9.1';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
@@ -150,7 +150,16 @@ function bindMap() {
 // A plain tap: in town it adds a stop; on the land map it opens that town's card
 // (tapping the town you're in goes into it).
 function tapNode(id) {
-  if (view() === 'town') { addStop(id); return; }
+  if (view() === 'town') {
+    // Tapping the only planned stop again walks straight there.
+    const r = G.route(s, 'town');
+    if (!r.trip && r.plan.length === 1 && r.plan[0].b === id) {
+      const plan = r.plan; r.plan = [];
+      if (G.goTo(c, s, id)) { sfx.unlock(); buzz(10); map().poke(id); return; }
+      r.plan = plan;
+    }
+    addStop(id); return;
+  }
   if (id === s.town && !G.activeLevel(s) && !editing) { setView('town'); return; }
   selected = id; maps.land.selected = id; infoKey = '';
   $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
@@ -359,7 +368,7 @@ function renderPlan() {
   if (!r.plan.length) {
     el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders or instructions, so give each stop some.' : L === 'land'
       ? 'Tap a town to see what it buys and sells, then add it to your route. You can also drag your finger through towns. Tap the town you are in to go back into it.'
-      : 'Tap buildings on the map in the order you want to visit them, or drag your finger through them.'}
+      : 'Tap a building twice to walk straight there. To plan a loop, tap buildings in the order you want to visit them, or drag your finger through them.'}
       ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant stays a day at each stop so you can trade.'}</p>`;
     return;
   }
@@ -452,8 +461,16 @@ function renderTrade() {
       <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sellall" data-good="${g}">All</button></div>`);
   }
   const A = G.activeLevel(s), tr = A && G.route(s, A).trip, visiting = tr?.atStop;
+  const ord = visiting && !tr.once ? G.route(s, A).plan[tr.idx].orders : {}, auto = Object.keys(ord).length && G.ordersUnlocked(c, s);
+  if (auto) {
+    const tag = g => ord[g] ? `<span class="otag ${tr.manual ? 'off' : ''}">⟳ ${ord[g] === 'buy' ? 'Buys' : 'Sells'} at day end</span>` : '';
+    let k = 0;
+    for (const g in m.sells) rows[k] = rows[k++].replace('</span><span class="tp">', `${tag(g)}</span><span class="tp">`);
+    for (const g in m.buys) rows[k] = rows[k++].replace('</span><span class="tp">', `${tag(g)}</span><span class="tp">`);
+  }
+  const ordText = auto ? `<p class="onote ${tr.manual ? 'off' : ''}">${tr.manual ? 'You took over this visit, so standing orders skip it.' : 'Standing orders here: ' + Object.entries(ord).map(([g, o]) => `${o === 'buy' ? 'buy' : 'sell'} ${c.goods[g].icon}`).join(', ') + '.'}</p>` : '';
   el.innerHTML = `<div class="sec-head"><b>${visiting ? 'Visiting' : 'Trading at'} ${nodeName(t.level, t.id)}${t.level === 'land' ? ' market' : ''}</b></div>
-    <div class="tcard">${visiting ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}
+    <div class="tcard">${visiting ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}${ordText}
     ${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
     ${visiting && tr.manual ? `<button class="btn go ${tr.go ? '' : 'afford'}" data-act="continue" id="walk-on">Walk on ▶</button>` : ''}</div>`;
   updateStay();

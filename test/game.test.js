@@ -127,3 +127,15 @@ console.log('game tests passed');
   assert.ok(G.loopSeconds(c, s, L) > 2 * c.dayLength * 2);
   console.log('block tests passed');
 }
+{
+  // walk straight to one building; the planned loop comes back after
+  const s = G.createState(c);
+  G.planAdd(c, s, 'town', 'farm'); G.planAdd(c, s, 'town', 'market');
+  assert.ok(G.goTo(c, s, 'bakery'));
+  for (let t = 0; t < 60 && G.activeLevel(s); t += 0.05) G.tick(c, s, 0.05);
+  assert.equal(G.activeLevel(s), null); assert.equal(s.locals.millbrook.at, 'bakery');
+  assert.deepEqual(s.locals.millbrook.plan.map(p => p.b), ['farm', 'market']);
+  assert.deepEqual(G.tradingAt(s), { level: 'town', id: 'bakery' });
+  assert.ok(!G.goTo(c, s, 'bakery'), 'already there');
+  console.log('goto tests passed');
+}

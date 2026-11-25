@@ -109,6 +109,12 @@ export class TownMap {
         ctx.fillStyle = done ? '#55606b' : '#f5c542'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#1a1a1a'; ctx.stroke();
         ctx.fillStyle = '#1a1a1a'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), mx, my + 4);
       });
+      // standing orders at this building, as a small tag: ⟳ +🍎 −🍞
+      const ords = s.plan.filter(st => st.b === id).flatMap(st => Object.entries(st.orders || {}));
+      if (ords.length) {
+        const t = '⟳ ' + [...new Map(ords.map(([g, o]) => [g + o, (o === 'buy' ? '+' : '−') + (this.content.goods[g]?.icon || '')])).values()].join(' ');
+        label(ctx, t, x, y + sz / 2 + 33, '700 12px system-ui', '#6fd3e8');
+      }
     }
 
     // the current visit's day, as a ring around the building
