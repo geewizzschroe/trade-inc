@@ -1,5 +1,5 @@
 // Browser storage for saves and settings. Saves are the JSON produced by engine.serialize.
-const SAVE_KEY = 'tradeinc.save';
+const SAVE_KEY = 'tradeinc.town.save';
 const SETTINGS_KEY = 'tradeinc.settings';
 
 export function loadSave() {

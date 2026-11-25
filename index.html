@@ -13,21 +13,35 @@
 <header id="hud">
   <button id="menu-btn" class="iconbtn" aria-label="Menu">☰</button>
   <div id="coins"><span class="coin">🪙</span><b id="coins-n">0</b></div>
-  <button id="buymode" class="iconbtn pill">Buy ×1</button>
-  <div id="ips"></div>
+  <div id="bag" aria-label="Bag"></div>
 </header>
 
 <canvas id="map"></canvas>
-<main id="routes"></main>
+
+<main id="panel">
+  <section class="sec">
+    <div class="sec-head"><b>Route</b><button id="clear" class="link">Clear</button></div>
+    <div id="plan"></div>
+    <button id="go" class="btn go">Plan a route first</button>
+  </section>
+  <section class="sec">
+    <div class="sec-head"><b>Upgrades</b></div>
+    <div id="upgrades"></div>
+  </section>
+</main>
+
+<div id="toast" hidden></div>
 
 <div id="menu" class="sheet" hidden>
   <div class="panel">
     <div class="panel-head"><b>Ledger</b><button id="menu-close" class="iconbtn" aria-label="Close">✕</button></div>
     <div class="stats">
-      <div><span>Total earned</span><b id="stat-earned">0</b></div>
-      <div><span>Trips completed</span><b id="stat-trips">0</b></div>
-      <div><span>Taps</span><b id="stat-taps">0</b></div>
+      <div><span>Coins earned</span><b id="stat-earned">0</b></div>
+      <div><span>Routes walked</span><b id="stat-trips">0</b></div>
+      <div><span>Hurry taps</span><b id="stat-taps">0</b></div>
     </div>
+    <h3>Achievements</h3>
+    <div id="achievements"></div>
     <label class="opt"><input type="checkbox" id="opt-sound"> Sound</label>
     <label class="opt"><input type="checkbox" id="opt-haptics"> Vibration</label>
     <h3>Save</h3>
@@ -40,12 +54,12 @@
   </div>
 </div>
 
-<div id="away" class="sheet" hidden>
+<div id="beyond" class="sheet" hidden>
   <div class="panel center">
-    <div class="big">🐫🐫🐫</div>
-    <p>While you were away for <b id="away-time"></b>, your caravans earned</p>
-    <div class="away-n">🪙 <b id="away-n"></b></div>
-    <button id="away-ok" class="btn afford">Collect</button>
+    <div class="big">🐎</div>
+    <p>With a horse, the roads beyond this town are open to you.</p>
+    <p class="small">The land map is the next stage to be built.</p>
+    <button id="beyond-ok" class="btn afford">Onward</button>
   </div>
 </div>
 
