@@ -5,7 +5,7 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.8.0';
+export const BUILD = '0.8.1';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
@@ -298,15 +298,16 @@ function render() {
   if ($('#bag').dataset.k !== bagHtml) { $('#bag').dataset.k = bagHtml; $('#bag').innerHTML = bagHtml; }
 
   const L = planLevel(), r = G.route(s, L);
-  const key = JSON.stringify([L, r?.plan, r?.trip?.idx ?? -1, !!r?.trip, G.ordersUnlocked(c, s), G.canPlan(c, s, L), G.activeLevel(s)]);
+  const ps = JSON.stringify(s.stock, (k, v) => typeof v === 'number' ? Math.round(v / 3) : v);
+  const key = JSON.stringify([ps, L, r?.plan, r?.trip?.idx ?? -1, !!r?.trip, G.ordersUnlocked(c, s), G.canPlan(c, s, L), G.activeLevel(s)]);
   if (key !== planKey) { planKey = key; renderPlan(); }
 
   const t = G.tradingAt(s), tr = G.activeLevel(s) && G.route(s, G.activeLevel(s)).trip;
-  const tk = JSON.stringify([t, tr?.atStop, tr?.manual, tr?.go, G.isWaiting(s), s.inv, s.coins, cap]);
+  const tk = JSON.stringify([ps, t, tr?.atStop, tr?.manual, tr?.go, G.isWaiting(s), s.inv, s.coins, cap]);
   if (tk !== tradeKey) { tradeKey = tk; renderTrade(); }
   updateStay();
 
-  const ik = JSON.stringify([selected, s.visited, view(), s.town, editing, r?.plan.length]);
+  const ik = JSON.stringify([ps, selected, s.visited, view(), s.town, editing, r?.plan.length]);
   if (ik !== infoKey) { infoKey = ik; renderInfo(); }
 
   const H = editing && G.hireOf(s, editing);
@@ -350,7 +351,7 @@ function renderPlan() {
   }
   const locked = !!r.trip || !G.canPlan(c, s, L);
   el.innerHTML = r.plan.map((st, i) => {
-    const m = G.market(c, L, st.b);
+    const m = G.market(c, L, st.b, s);
     const state = r.trip ? (i < r.trip.idx ? 'done' : i === r.trip.idx ? 'now' : '') : '';
     const chips = [];
     for (const g in m.sells) chips.push(chip(i, g, 'buy', m.sells[g], st.orders[g] === 'buy', locked));
@@ -371,7 +372,7 @@ function renderTrade() {
   const el = $('#trade'), t = G.tradingAt(s);
   if (!t) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  const m = G.market(c, t.level, t.id), rows = [];
+  const m = G.market(c, t.level, t.id, s), rows = [];
   for (const g in m.sells) {
     const can = G.maxBuy(c, s, g) > 0;
     rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}</span><span class="tp">🪙 ${m.sells[g]}</span>
@@ -440,15 +441,16 @@ function renderInfo() {
   if (view() !== 'land' || !selected) { el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
   const t = c.towns[selected], m = G.market(c, 'land', selected), rows = [];
-  const fmt = e => e.exact ? `${e.lo}` : `${e.lo}–${e.hi}`;
-  for (const g in m.sells) rows.push(`<span class="ig buy">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'buy'))}</span>`);
+  const arrow = g => { const k = G.priceMult(c, s, selected, g); return k > 1.04 ? '<i class="up">▲</i>' : k < 0.96 ? '<i class="dn">▼</i>' : ''; };
+  const fmt = (e, g) => (e.exact ? `${e.lo}` : `${e.lo}–${e.hi}`) + (e.exact ? arrow(g) : '');
+  for (const g in m.sells) rows.push(`<span class="ig buy">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'buy'), g)}</span>`);
   const sells = [];
-  for (const g in m.buys) sells.push(`<span class="ig sell">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'sell'))}</span>`);
+  for (const g in m.buys) sells.push(`<span class="ig sell">${c.goods[g].icon} ${fmt(G.priceEstimate(c, s, selected, g, 'sell'), g)}</span>`);
   const exact = !!s.visited[selected];
   const here = selected === s.town;
   el.innerHTML = `<div class="tcard info">
     <div class="stop-head"><span>${t.icon} ${t.name}</span><button class="rm" data-info="close" aria-label="Close">✕</button></div>
-    <p class="small-left">${exact ? 'Prices from your visit.' : 'Rough estimates. Visit to learn the exact prices.'}</p>
+    <p class="small-left">${exact ? 'Prices right now. Trading here moves them (▲ ▼); they drift back over time.' : 'Rough estimates. Visit to learn the exact prices.'}</p>
     <div class="irow"><b>Sells to you</b>${rows.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="irow"><b>Buys from you</b>${sells.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="btnrow">${here && !G.activeLevel(s) ? '<button class="btn" data-info="enter">Enter town</button>' : ''}

@@ -30,6 +30,7 @@ export function createState(c) {
     visited: { [c.startTown]: true },
     view: 'town',
     hires: [],                         // hired merchants: { id, name, route, inv }
+    stock: {},                         // land trade pressure: stock[town][good], below 0 = bought out
     lastSeen: Date.now(),
   };
 }
@@ -86,14 +87,42 @@ function hurryFor(c, level) { return level === 'land' ? c.landHurry : c.hurryDis
 
 // What a stop buys and sells. A town on the land level trades as one market:
 // the cheapest seller and the best buyer among its buildings.
-export function market(c, level, id) {
+// With a state passed in, land prices include trade pressure (see priceMult).
+export function market(c, level, id, s) {
   if (!landLike(level)) { const b = findBuilding(c, id); return { sells: b.sells, buys: b.buys }; }
   const sells = {}, buys = {};
   for (const b of Object.values(c.towns[id].buildings)) {
     for (const g in b.sells) sells[g] = Math.min(sells[g] ?? Infinity, b.sells[g]);
     for (const g in b.buys) buys[g] = Math.max(buys[g] ?? 0, b.buys[g]);
   }
+  if (s) {
+    for (const g in sells) sells[g] = adjust(sells[g], priceMult(c, s, id, g));
+    for (const g in buys) buys[g] = adjust(buys[g], priceMult(c, s, id, g));
+  }
   return { sells, buys };
+}
+const adjust = (p, m) => Math.max(1, Math.round(p * m));
+
+// Land prices react to trading: every unit bought from a town makes that good
+// scarcer there (dearer to buy, better to sell), every unit sold makes it more
+// plentiful (cheaper both ways). The effect fades back to normal over time.
+export function priceMult(c, s, town, g) {
+  const r = c.prices.react; if (!r || !s?.stock) return 1;
+  const k = s.stock[town]?.[g] || 0;
+  return Math.min(r.maxMult, Math.max(r.minMult, 1 - r.perUnit * k));
+}
+function shift(c, s, level, town, g, n) {
+  if (!landLike(level) || !c.prices.react) return;
+  const t = (s.stock ??= {})[town] ??= {};
+  t[g] = (t[g] || 0) + n;
+}
+function recover(c, s, dt) {
+  const r = c.prices.react; if (!r || !s.stock) return;
+  const f = Math.exp(-dt / r.recoverSeconds);
+  for (const t in s.stock) {
+    for (const g in s.stock[t]) { s.stock[t][g] *= f; if (Math.abs(s.stock[t][g]) < 0.05) delete s.stock[t][g]; }
+    if (!Object.keys(s.stock[t]).length) delete s.stock[t];
+  }
 }
 function findBuilding(c, id) {
   for (const t of Object.values(c.towns)) if (t.buildings[id]) return t.buildings[id];
@@ -101,12 +130,12 @@ function findBuilding(c, id) {
 }
 
 // What the stop charges you for one unit / pays you for one unit. Prices are fixed.
-export function buyPrice(c, level, id, g) { return market(c, level, id).sells[g] ?? null; }
-export function sellPrice(c, level, id, g) { return market(c, level, id).buys[g] ?? null; }
+export function buyPrice(c, level, id, g, s) { return market(c, level, id, s).sells[g] ?? null; }
+export function sellPrice(c, level, id, g, s) { return market(c, level, id, s).buys[g] ?? null; }
 
 // Price shown on the land map: exact once visited, a range before that.
 export function priceEstimate(c, s, townId, g, kind) {
-  const p = kind === 'buy' ? buyPrice(c, 'land', townId, g) : sellPrice(c, 'land', townId, g);
+  const p = kind === 'buy' ? buyPrice(c, 'land', townId, g, s) : sellPrice(c, 'land', townId, g, s);
   if (p == null) return null;
   const mode = c.prices.estimate || 'exact';
   const exact = mode === 'exact' || (mode === 'untilVisited' && s.visited[townId]) || (mode === 'onlyHere' && s.town === townId);
@@ -211,6 +240,7 @@ export function hurry(c, s) {
 
 export function tick(c, s, dt) {
   const ev = [];
+  recover(c, s, dt);
   const L = activeLevel(s);
   if (L) tickRoute(c, s, L, dt, ev);
   for (const h of s.hires) if (h.route.trip) tickRoute(c, s, 'hire:' + h.id, dt, ev);
@@ -269,10 +299,11 @@ function arrive(c, s, level, ev) {
 function runOrders(c, s, level, st, ev) {
   const inv = invOf(s, level), cap = capFor(c, s, level);
   for (const g in st.orders) if (st.orders[g] === 'sell') {
-    const p = sellPrice(c, level, st.b, g), n = inv[g] || 0;
-    if (!p || !n) continue;
-    delete inv[g]; s.coins += p * n; s.stats.earned += p * n;
-    ev.push({ type: 'sell', level, b: st.b, good: g, n, coins: p * n });
+    const n = inv[g] || 0;
+    if (!sellPrice(c, level, st.b, g) || !n) continue;
+    const got = sellUnits(c, s, level, st.b, g, n);
+    delete inv[g]; s.coins += got; s.stats.earned += got;
+    ev.push({ type: 'sell', level, b: st.b, good: g, n, coins: got });
   }
   const buys = Object.keys(st.orders).filter(g => st.orders[g] === 'buy');
   const bought = {};
@@ -281,9 +312,9 @@ function runOrders(c, s, level, st, ev) {
     progress = false;
     for (const g of buys) {
       if (Object.values(inv).reduce((a, b) => a + b, 0) >= cap) break;
-      const p = buyPrice(c, level, st.b, g);
+      const p = buyPrice(c, level, st.b, g, s);
       if (p == null || s.coins < p) continue;
-      s.coins -= p; inv[g] = (inv[g] || 0) + 1;
+      s.coins -= p; inv[g] = (inv[g] || 0) + 1; shift(c, s, level, st.b, g, -1);
       (bought[g] ??= { n: 0, coins: 0 }); bought[g].n++; bought[g].coins += p;
       progress = true;
     }
@@ -340,8 +371,22 @@ export function tradingAt(s) {
 
 export function maxBuy(c, s, g) {
   const t = tradingAt(s); if (!t) return 0;
-  const p = buyPrice(c, t.level, t.id, g); if (p == null) return 0;
-  return Math.max(0, Math.min(Math.floor(s.coins / p), capacity(c, s) - carried(s)));
+  if (buyPrice(c, t.level, t.id, g) == null) return 0;
+  const room = capacity(c, s) - carried(s);
+  let n = 0, coins = s.coins;
+  const saved = s.stock?.[t.id]?.[g];
+  while (n < room) {
+    const p = buyPrice(c, t.level, t.id, g, s); if (coins < p) break;
+    coins -= p; n++; shift(c, s, t.level, t.id, g, -1);
+  }
+  if (landLike(t.level)) { if (saved === undefined) delete s.stock[t.id]?.[g]; else s.stock[t.id][g] = saved; }
+  return n;
+}
+// Sell n units one at a time (each lowers the next one's price on land). Returns coins.
+function sellUnits(c, s, level, id, g, n) {
+  let got = 0;
+  for (let i = 0; i < n; i++) { got += sellPrice(c, level, id, g, s); shift(c, s, level, id, g, 1); }
+  return got;
 }
 
 function takeOver(s) {
@@ -355,9 +400,10 @@ export function tradeBuy(c, s, g, n = 1) {
   n = Math.min(n, maxBuy(c, s, g));
   if (!t || n <= 0) return null;
   takeOver(s);
-  const p = buyPrice(c, t.level, t.id, g);
-  s.coins -= p * n; s.inv[g] = (s.inv[g] || 0) + n;
-  return { type: 'buy', level: t.level, b: t.id, good: g, n, coins: p * n };
+  let paid = 0;
+  for (let i = 0; i < n; i++) { paid += buyPrice(c, t.level, t.id, g, s); shift(c, s, t.level, t.id, g, -1); }
+  s.coins -= paid; s.inv[g] = (s.inv[g] || 0) + n;
+  return { type: 'buy', level: t.level, b: t.id, good: g, n, coins: paid };
 }
 
 export function tradeSell(c, s, g, n = 1) {
@@ -366,9 +412,10 @@ export function tradeSell(c, s, g, n = 1) {
   n = Math.min(n, s.inv[g] || 0);
   if (!p || n <= 0) return null;
   takeOver(s);
+  const got = sellUnits(c, s, t.level, t.id, g, n);
   s.inv[g] -= n; if (!s.inv[g]) delete s.inv[g];
-  s.coins += p * n; s.stats.earned += p * n;
-  return { type: 'sell', level: t.level, b: t.id, good: g, n, coins: p * n };
+  s.coins += got; s.stats.earned += got;
+  return { type: 'sell', level: t.level, b: t.id, good: g, n, coins: got };
 }
 
 export function continueTrip(c, s) {
@@ -406,11 +453,12 @@ export function applyOffline(c, s, seconds) {
       for (let t = 0; t < secs; t += 0.5) {
         const dt = Math.min(0.5, secs - t);
         let any = false;
+        recover(c, s, dt);
         for (const lv of levels) if (route(s, lv)?.trip) { tickRoute(c, s, lv, dt, []); any = true; }
-        if (!any) break;
+        if (!any) { recover(c, s, secs - t - dt); break; }
       }
     } finally { delete s._offline; }
-  }
+  } else recover(c, s, secs);
   return s.coins - before;
 }
 

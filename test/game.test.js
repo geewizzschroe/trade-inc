@@ -90,3 +90,17 @@ console.log('game tests passed');
   const rt = G.deserialize(c, G.serialize(s)); assert.equal(rt.hires.length, 2);
   console.log('hire tests passed');
 }
+{
+  // land prices react to trading and recover
+  const s = G.createState(c); s.coins = 5000; G.buyUpgrade(c, s, 'horse'); G.buyUpgrade(c, s, 'wagon');
+  s.view = 'land';
+  const m = G.market(c, 'land', 'millbrook').sells, g = Object.keys(m).sort((x, y) => m[y] - m[x])[0]; // dearest good, so +1% shows
+  const q0 = G.buyPrice(c, 'land', 'millbrook', g, s);
+  const ev = G.tradeBuy(c, s, g, 30);
+  assert.ok(ev.n === 30 && ev.coins > q0 * 30, 'buying 30 costs more than 30x base');
+  assert.ok(G.buyPrice(c, 'land', 'millbrook', g, s) > q0, 'price rose');
+  for (let t = 0; t < 600; t += 0.5) G.tick(c, s, 0.5);
+  assert.equal(G.buyPrice(c, 'land', 'millbrook', g, s), q0, 'price recovered');
+  assert.equal(G.buyPrice(c, 'town', 'farm', 'apples', s), G.buyPrice(c, 'town', 'farm', 'apples'), 'town level stays fixed');
+  console.log('price tests passed');
+}

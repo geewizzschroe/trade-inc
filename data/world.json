@@ -13,7 +13,8 @@
  "prices": {
   "mode": "fixed",
   "estimate": "untilVisited",
-  "estimateSpread": 0.25
+  "estimateSpread": 0.25,
+  "react": { "perUnit": 0.01, "recoverSeconds": 30, "minMult": 0.25, "maxMult": 4 }
  },
  "routeMode": "loop",
  "stopMode": "manual",
