@@ -309,7 +309,8 @@ function arrive(c, s, level, ev) {
   // While the app is closed, stops without orders are passed by.
   if (s._offline && !auto) { advance(c, s, level, ev); return; }
   ev.push({ type: 'arrive', level, b: st.b, auto });
-  Object.assign(r.trip, { atStop: true, stay: c.dayLength, manual: !auto, go: false });
+  // Before standing orders there is no minimum stay: trade, then walk on.
+  Object.assign(r.trip, { atStop: true, stay: ordersUnlocked(c, s) ? c.dayLength : 0, manual: !auto, go: false });
 }
 
 function runOrders(c, s, level, st, ev) {

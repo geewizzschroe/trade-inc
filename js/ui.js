@@ -5,7 +5,7 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.9.1';
+export const BUILD = '0.9.2';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
@@ -369,7 +369,7 @@ function renderPlan() {
     el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders or instructions, so give each stop some.' : L === 'land'
       ? 'Tap a town to see what it buys and sells, then add it to your route. You can also drag your finger through towns. Tap the town you are in to go back into it.'
       : 'Tap a building twice to walk straight there. To plan a loop, tap buildings in the order you want to visit them, or drag your finger through them.'}
-      ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant stays a day at each stop so you can trade.'}</p>`;
+      ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant waits at each stop until you tap Walk on.'}</p>`;
     return;
   }
   const locked = !!r.trip || !G.canPlan(c, s, L);
@@ -470,7 +470,7 @@ function renderTrade() {
   }
   const ordText = auto ? `<p class="onote ${tr.manual ? 'off' : ''}">${tr.manual ? 'You took over this visit, so standing orders skip it.' : 'Standing orders here: ' + Object.entries(ord).map(([g, o]) => `${o === 'buy' ? 'buy' : 'sell'} ${c.goods[g].icon}`).join(', ') + '.'}</p>` : '';
   el.innerHTML = `<div class="sec-head"><b>${visiting ? 'Visiting' : 'Trading at'} ${nodeName(t.level, t.id)}${t.level === 'land' ? ' market' : ''}</b></div>
-    <div class="tcard">${visiting ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}${ordText}
+    <div class="tcard">${visiting && G.ordersUnlocked(c, s) ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}${ordText}
     ${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
     ${visiting && tr.manual ? `<button class="btn go ${tr.go ? '' : 'afford'}" data-act="continue" id="walk-on">Walk on ▶</button>` : ''}</div>`;
   updateStay();
