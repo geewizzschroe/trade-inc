@@ -4,7 +4,7 @@ import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 
-export const BUILD = '0.5.1';
+export const BUILD = '0.6.0';
 
 const $ = sel => document.querySelector(sel);
 let c, s, map;
@@ -67,7 +67,7 @@ function bindMap() {
   let tracing = false;
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
-    if (s.trip?.waiting) { pulse($('#trade'), 'shake'); sfx.deny(); return; }
+    if (s.trip?.atStop) { pulse($('#trade'), 'shake'); sfx.deny(); return; }
     if (s.trip) {
       if (T.hurry(c, s)) { sfx.tap(); buzz(6); map.puff(); floatText(e.clientX, e.clientY - 10, '»', 'tap'); }
       return;
@@ -100,7 +100,8 @@ function handle(events) {
   for (const ev of events) {
     if (ev.type === 'arrive') {
       map.poke(ev.b); buzz(8);
-      if (s.trip?.waiting) { sfx.unlock(); $('#panel').scrollTo({ top: 0, behavior: 'smooth' }); }
+      if (!ev.auto) sfx.unlock();
+      $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
     }
     else if (ev.type === 'sell') {
       const [x, y] = map.buildingPagePos(ev.b);
@@ -185,15 +186,18 @@ function render() {
   const key = JSON.stringify([s.plan, s.trip?.idx ?? -1, !!s.trip, s.plan.map(st => prices(st.b)), T.ordersUnlocked(c, s)]);
   if (key !== planKey) { planKey = key; renderPlan(); }
 
-  const tk = JSON.stringify([T.tradingAt(s), s.trip?.waiting, s.inv, s.coins, T.capacity(c, s)]);
+  const tk = JSON.stringify([T.tradingAt(s), s.trip?.atStop, s.trip?.manual, s.trip?.go, T.isWaiting(s), s.inv, s.coins, T.capacity(c, s)]);
   if (tk !== tradeKey) { tradeKey = tk; renderTrade(); }
+  updateStay();
+  const ls = T.loopSeconds(c, s);
+  $('#loop-time').textContent = s.plan.length ? `≈ ${fmtTime(ls)} per loop` : '';
 
   const go = $('#go');
   go.classList.toggle('afford', !s.trip && s.plan.length > 0);
   go.classList.toggle('stop-btn', !!s.trip);
-  go.textContent = s.trip ? (s.trip.waiting ? '■ Stop here to change the route' : s.trip.stopRequested ? 'Stopping at the next building…' : '■ Stop to change the route')
+  go.textContent = s.trip ? (s.trip.atStop ? '■ Stop here to change the route' : s.trip.stopRequested ? 'Stopping at the next building…' : '■ Stop to change the route')
     : s.plan.length ? 'Go ▶ (repeats until stopped)' : 'Plan a route first';
-  $('#walk-hint').hidden = !s.trip || !!s.trip.waiting;
+  $('#walk-hint').hidden = !s.trip || !!s.trip.atStop;
   $('#clear').hidden = !!s.trip || !s.plan.length;
 
   const uk = JSON.stringify([s.upgrades, s.coins >= 0 && c.upgrades.map(u => s.coins >= u.cost)]);
@@ -217,10 +221,27 @@ function renderTrade() {
       <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sell" data-good="${g}">Sell</button>
       <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sellall" data-good="${g}">All</button></div>`);
   }
-  const waiting = s.trip?.waiting;
-  el.innerHTML = `<div class="sec-head"><b>${waiting ? 'Arrived at' : 'Trading at'} ${d.icon} ${d.name}</b></div>
-    <div class="tcard">${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
-    ${waiting ? `<button class="btn go afford" data-act="continue">Walk on ▶</button>` : ''}</div>`;
+  const tr = s.trip, visiting = tr?.atStop;
+  el.innerHTML = `<div class="sec-head"><b>${visiting ? 'Visiting' : 'Trading at'} ${d.icon} ${d.name}</b></div>
+    <div class="tcard">${visiting ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}
+    ${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
+    ${visiting && tr.manual ? `<button class="btn go ${tr.go ? '' : 'afford'}" data-act="continue" id="walk-on">Walk on ▶</button>` : ''}</div>`;
+  updateStay();
+}
+
+// Per-frame text for the current visit's day.
+function updateStay() {
+  const tr = s.trip, txt = $('#stay-text');
+  if (!tr?.atStop || !txt) return;
+  const left = Math.max(0, tr.stay);
+  $('#day-fill').style.transform = `scaleX(${1 - left / c.dayLength})`;
+  let t;
+  if (!tr.manual) t = `Standing orders run at the end of the day (${Math.ceil(left)}s). Trade by hand to take over this visit.`;
+  else if (tr.go) t = left > 0 ? `Leaving when the day ends (${Math.ceil(left)}s).` : 'Leaving…';
+  else if (left > 0) t = `The day ends in ${Math.ceil(left)}s. Tap Walk on whenever you're done.`;
+  else t = 'The day is over. Waiting for you to walk on.';
+  if (txt.textContent !== t) txt.textContent = t;
+  const w = $('#walk-on'); if (w) { const l = tr.go ? 'Walking on at day\'s end' : 'Walk on ▶'; if (w.textContent !== l) w.textContent = l; }
 }
 
 function prices(b) {

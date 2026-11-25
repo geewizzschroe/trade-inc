@@ -79,14 +79,16 @@ export function toggleOrder(c, s, i, g) {
 }
 
 // ---------- the trip ----------
+// A trip walks the plan in order. At each stop the merchant stays at least one day (c.dayLength
+// seconds). Stops with standing orders trade at the end of the day and walk on; trading by hand
+// during the day suspends the orders for that visit, and then the merchant waits for "Walk on".
 
 export function startTrip(s) {
   if (s.trip || !s.plan.length) return false;
-  s.trip = { idx: 0, from: s.at, leg: 0, pause: 0, startCoins: s.coins + inventoryValueHint(s) };
+  s.trip = { idx: 0, from: s.at, leg: 0, atStop: false, stay: 0, manual: false, go: false, startCoins: s.coins };
   s.at = null;
   return true;
 }
-function inventoryValueHint() { return 0; }
 
 function legEnds(c, s) {
   const tr = s.trip;
@@ -95,10 +97,15 @@ function legEnds(c, s) {
   return { from, to, len: Math.hypot(to.x - from.x, to.y - from.y) };
 }
 
+// Waiting at a stop for the player after the day is over.
+export function isWaiting(s) {
+  const tr = s.trip;
+  return !!tr && tr.atStop && tr.manual && !tr.go && tr.stay <= 0;
+}
+
 export function hurry(c, s) {
-  if (!s.trip) return false;
+  if (!s.trip || s.trip.atStop) return false;
   s.stats.taps++;
-  if (s.trip.pause > 0) { s.trip.pause = 0; return true; }
   s.trip.leg += c.hurryDistance;
   return true;
 }
@@ -110,11 +117,14 @@ export function tick(c, s, dt) {
   let guard = 0;
   while (s.trip && budget > 0 && guard++ < 50) {
     const tr = s.trip;
-    if (tr.waiting) break;
-    if (tr.pause > 0) {
-      const used = Math.min(tr.pause, budget);
-      tr.pause -= used; budget -= used;
-      if (tr.pause > 0) break;
+    if (tr.atStop) {
+      if (tr.stay > 0) {
+        const used = Math.min(tr.stay, budget);
+        tr.stay -= used; budget -= used;
+        if (tr.stay > 0) break;
+      }
+      if (tr.manual && !tr.go) break; // waiting for the player
+      if (!tr.manual) runOrders(c, s, s.plan[tr.idx], ev);
       advance(c, s, ev);
       continue;
     }
@@ -134,13 +144,14 @@ export function tick(c, s, dt) {
 }
 
 function arrive(c, s, ev) {
-  const st = s.plan[s.trip.idx];
-  ev.push({ type: 'arrive', b: st.b });
-  if (!autoTrades(c, s, st)) {
-    // While the app is closed, stops without orders are walked past.
-    if (s._offline) { s.trip.pause = 0.001; return; }
-    s.trip.waiting = true; return;
-  }
+  const st = s.plan[s.trip.idx], auto = autoTrades(c, s, st);
+  // While the app is closed, stops without orders are walked past.
+  if (s._offline && !auto) { advance(c, s, ev); return; }
+  ev.push({ type: 'arrive', b: st.b, auto });
+  Object.assign(s.trip, { atStop: true, stay: c.dayLength, manual: !auto, go: false });
+}
+
+function runOrders(c, s, st, ev) {
   // Sell first, so the coins can pay for buying.
   for (const g in st.orders) if (st.orders[g] === 'sell') {
     let n = 0, got = 0;
@@ -170,12 +181,11 @@ function arrive(c, s, ev) {
     }
   }
   for (const g in bought) ev.push({ type: 'buy', b: st.b, good: g, n: bought[g].n, coins: bought[g].coins });
-  s.trip.pause = c.stopPause;
 }
 
 function advance(c, s, ev) {
   const tr = s.trip;
-  tr.idx++; tr.leg = 0;
+  tr.idx++; tr.leg = 0; tr.atStop = false; tr.stay = 0; tr.manual = false; tr.go = false;
   const stopping = tr.stopRequested;
   if (tr.idx >= s.plan.length || stopping) {
     s.at = s.plan[tr.idx - 1].b;
@@ -186,6 +196,17 @@ function advance(c, s, ev) {
     if (profit > 0) unlockAch(s, 'firstProfit', ev);
     if (c.routeMode === 'loop' && !stopping) startTrip(s);
   }
+}
+
+// Estimated seconds for one lap of the loop (walking at full speed, one day per stop).
+export function loopSeconds(c, s) {
+  if (!s.plan.length) return 0;
+  let d = 0;
+  for (let i = 0; i < s.plan.length; i++) {
+    const a = c.buildings[s.plan[(i - 1 + s.plan.length) % s.plan.length].b], b = c.buildings[s.plan[i].b];
+    d += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return d / speed(c, s) + s.plan.length * c.dayLength;
 }
 
 function recoverPrices(c, s, dt) {
@@ -231,7 +252,7 @@ export function autoTrades(c, s, st) {
 // The building the merchant can trade with right now, or null while walking.
 export function tradingAt(s) {
   if (!s.trip) return s.at;
-  if (s.trip.waiting) return s.plan[s.trip.idx].b;
+  if (s.trip.atStop) return s.plan[s.trip.idx].b;
   return null;
 }
 
@@ -241,10 +262,14 @@ export function maxBuy(c, s, g) {
   return Math.max(0, Math.min(Math.floor(s.coins / p), capacity(c, s) - carried(s)));
 }
 
+// Trading by hand during a visit takes over from the standing orders for that visit.
+function takeOver(s) { if (s.trip?.atStop) s.trip.manual = true; }
+
 export function tradeBuy(c, s, g, n = 1) {
   const b = tradingAt(s);
   n = Math.min(n, maxBuy(c, s, g));
   if (!b || n <= 0) return null;
+  takeOver(s);
   const p = buyPrice(c, s, b, g);
   s.coins -= p * n; s.inv[g] = (s.inv[g] || 0) + n;
   return { type: 'buy', b, good: g, n, coins: p * n };
@@ -255,24 +280,25 @@ export function tradeSell(c, s, g, n = 1) {
   const p = b && sellPrice(c, s, b, g);
   n = Math.min(n, s.inv[g] || 0);
   if (!p || n <= 0) return null;
+  takeOver(s);
   s.inv[g] -= n; if (!s.inv[g]) delete s.inv[g];
   s.coins += p * n; s.stats.earned += p * n;
   return { type: 'sell', b, good: g, n, coins: p * n };
 }
 
-// Done trading at this stop: walk on.
+// "Walk on": leave once the day is over (right away if it already is).
 export function continueTrip(c, s) {
-  if (!s.trip?.waiting) return false;
-  s.trip.waiting = false;
-  s.trip.pause = c.stopPause * 0.5;
+  if (!s.trip?.atStop || !s.trip.manual) return false;
+  s.trip.go = true;
   return true;
 }
 
-// Ask the merchant to stop at the next building they reach.
+// Ask the merchant to stop. At a stop they stop right there; walking, at the next building.
 export function requestStop(s) {
-  if (!s.trip) return false;
-  s.trip.stopRequested = true;
-  if (s.trip.waiting) { s.trip.waiting = false; s.trip.pause = 0.001; }
+  const tr = s.trip;
+  if (!tr) return false;
+  if (tr.atStop) { s.at = s.plan[tr.idx].b; s.trip = null; s.stats.trips++; return true; }
+  tr.stopRequested = true;
   return true;
 }
 
@@ -285,7 +311,8 @@ export function applyOffline(c, s, seconds) {
   // Only a route with at least one stop that trades by itself does anything while closed.
   if (s.trip && s.plan.some(st => autoTrades(c, s, st))) {
     s._offline = true;
-    if (s.trip.waiting) { s.trip.waiting = false; s.trip.pause = 0.001; }
+    // A visit the player had taken over: the merchant leaves as soon as the day is done.
+    if (s.trip.atStop && s.trip.manual) s.trip.go = true;
     try {
       while (t < secs && s.trip) {
         const dt = Math.min(step, secs - t);

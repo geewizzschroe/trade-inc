@@ -47,7 +47,7 @@ assert.throws(() => T.deserialize(c, '{"coins":1}'));
 const cl = { ...c, routeMode: 'loop', stopMode: 'orders', prices: { ...c.prices, mode: 'fixed' } };
 const s5 = T.createState(cl); T.planAdd(cl, s5, 'farm'); T.toggleOrder(cl, s5, 0, 'apples'); T.planAdd(cl, s5, 'market');
 T.startTrip(s5); run.call(null, s5, 0);
-for (let i = 0; i < 600; i++) T.tick(cl, s5, 0.05);
+for (let i = 0; i < 2000; i++) T.tick(cl, s5, 0.05);
 assert.ok(s5.trip, 'still looping'); assert.ok(s5.stats.trips >= 2, 'laps ' + s5.stats.trips);
 assert.equal(T.sellPrice(cl, s5, 'market', 'apples'), 4, 'fixed price');
 const g = T.applyOffline(cl, s5, 600); assert.ok(g > 0, 'offline gain ' + g);
@@ -60,7 +60,7 @@ assert.equal(T.tradingAt(s6), 'market');
 T.planAdd(cm, s6, 'farm'); T.planAdd(cm, s6, 'market'); T.startTrip(s6);
 assert.equal(T.tradingAt(s6), null);
 for (let i = 0; i < 200; i++) T.tick(cm, s6, 0.05);
-assert.ok(s6.trip.waiting); assert.equal(T.tradingAt(s6), 'farm');
+assert.ok(T.isWaiting(s6)); assert.equal(T.tradingAt(s6), 'farm');
 assert.equal(T.tradeBuy(cm, s6, 'apples', 1e9).n, 3);
 assert.equal(T.tradeBuy(cm, s6, 'wheat'), null, 'bag full');
 assert.equal(T.tradeSell(cm, s6, 'apples'), null, 'farm does not buy apples');
@@ -76,15 +76,15 @@ T.buyUpgrade(cm, s7, 'orders'); assert.ok(T.ordersUnlocked(cm, s7));
 T.planAdd(cm, s7, 'farm'); T.toggleOrder(cm, s7, 0, 'apples'); T.planAdd(cm, s7, 'market'); T.toggleOrder(cm, s7, 1, 'apples');
 T.startTrip(s7); const c0 = s7.coins;
 T.applyOffline(cm, s7, 300);
-assert.ok(s7.coins > c0, 'orders loop earns offline'); assert.ok(!s7.trip.waiting);
+assert.ok(s7.coins > c0, 'orders loop earns offline'); assert.ok(!T.isWaiting(s7));
 // offline: a stop with no orders is walked past instead of waiting
 const s8 = T.createState(cm); s8.coins = 200; T.buyUpgrade(cm, s8, 'orders');
 T.planAdd(cm, s8, 'farm'); T.toggleOrder(cm, s8, 0, 'apples');
 T.planAdd(cm, s8, 'bakery');                       // no orders
 T.planAdd(cm, s8, 'market'); T.toggleOrder(cm, s8, 2, 'apples');
 T.startTrip(s8);
-for (let i = 0; i < 400 && !s8.trip.waiting; i++) T.tick(cm, s8, 0.05);
-assert.ok(s8.trip.waiting, 'waits at bakery while open');
+for (let i = 0; i < 400 && !T.isWaiting(s8); i++) T.tick(cm, s8, 0.05);
+assert.ok(T.isWaiting(s8), 'waits at bakery while open');
 const c8 = s8.coins; T.applyOffline(cm, s8, 600);
 assert.ok(s8.coins > c8, 'earns offline past the no-order stop'); assert.ok(s8.stats.trips >= 3);
 assert.equal(s8._offline, undefined);
@@ -92,3 +92,23 @@ assert.equal(s8._offline, undefined);
 const s9 = T.createState(cm); T.planAdd(cm, s9, 'farm'); T.startTrip(s9);
 assert.equal(T.applyOffline(cm, s9, 600), 0);
 console.log('town tests passed');
+{
+  // day-long stays: orders run at the end of the day; trading by hand takes over the visit
+  const cm2 = { ...c, routeMode: 'loop', stopMode: 'manual', prices: { ...c.prices, mode: 'fixed' } };
+  const s = T.createState(cm2); s.coins = 200; T.buyUpgrade(cm2, s, 'orders');
+  T.planAdd(cm2, s, 'farm'); T.toggleOrder(cm2, s, 0, 'apples'); T.planAdd(cm2, s, 'market'); T.toggleOrder(cm2, s, 1, 'apples');
+  T.startTrip(s);
+  let i = 0; while (!s.trip.atStop && i++ < 400) T.tick(cm2, s, 0.05);
+  assert.equal(T.tradingAt(s), 'farm'); assert.equal(T.carried(s), 0, 'no trade before the day ends');
+  for (let k = 0; k < 130; k++) T.tick(cm2, s, 0.05);
+  assert.equal(s.inv.apples, 3, 'orders ran at end of day'); assert.ok(!s.trip.atStop, 'walked on');
+  // at the market, sell one by hand: orders suspended, merchant waits after the day
+  i = 0; while (!s.trip.atStop && i++ < 400) T.tick(cm2, s, 0.05);
+  T.tradeSell(cm2, s, 'apples', 1);
+  for (let k = 0; k < 140; k++) T.tick(cm2, s, 0.05);
+  assert.ok(T.isWaiting(s)); assert.equal(s.inv.apples, 2, 'orders did not run');
+  T.continueTrip(cm2, s); T.tick(cm2, s, 0.05);
+  assert.ok(!s.trip.atStop);
+  assert.ok(T.loopSeconds(cm2, s) > 12 && T.loopSeconds(cm2, s) < 30);
+  console.log('day tests passed');
+}

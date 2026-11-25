@@ -134,3 +134,8 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .tb.sell1.ok{background:linear-gradient(var(--gold),var(--gold2));color:#2b1d00;box-shadow:0 3px 0 #7a5100}
 .tcard .go{margin-top:10px}
 .nochips{color:var(--mute);font-size:12px;margin-top:6px}
+.loop-time{text-transform:none;letter-spacing:0;font-weight:500;color:var(--gold);margin-left:6px;font-size:13px}
+.day{padding:8px 0 4px}
+.day-bar{height:8px;border-radius:4px;background:#13283b;overflow:hidden}
+.day-bar i{display:block;height:100%;background:linear-gradient(90deg,#f5c542,#ffe28a);transform-origin:left;transform:scaleX(0)}
+#stay-text{margin:6px 0 2px;font-size:13px;color:var(--mute)}

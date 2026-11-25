@@ -105,6 +105,14 @@ export class TownMap {
       });
     }
 
+    // the current visit's day, as a ring around the building
+    if (s.trip?.atStop) {
+      const d = c.buildings[s.plan[s.trip.idx].b], [x, y] = this.toScreen(d.x, d.y);
+      const f = 1 - Math.max(0, s.trip.stay) / c.dayLength;
+      ctx.beginPath(); ctx.arc(x, y, size * 0.8, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2);
+      ctx.lineWidth = 5; ctx.strokeStyle = s.trip.manual ? '#8fe0a2' : '#f5c542'; ctx.lineCap = 'round'; ctx.stroke();
+    }
+
     // dust puffs from hurrying
     this.puffs = this.puffs.filter(p => (p.t += dt) < 0.5);
     for (const p of this.puffs) {
@@ -115,7 +123,7 @@ export class TownMap {
 
     // merchant
     const [mx, my] = this.toScreen(s.pos.x, s.pos.y);
-    const walking = s.trip && s.trip.pause <= 0;
+    const walking = s.trip && !s.trip.atStop;
     const bob = walking ? Math.abs(Math.sin(now / 90)) * 4 : 0;
     let faceRight = false;
     if (s.trip) { const to = c.buildings[s.plan[s.trip.idx].b]; faceRight = to.x > s.pos.x; }

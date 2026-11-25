@@ -4,7 +4,7 @@
   "startAt": "market",
   "baseCapacity": 3,
   "walkSpeed": 140,
-  "stopPause": 0.35,
+  "dayLength": 6,
   "hurryDistance": 28,
   "prices": { "mode": "fixed", "sellDrop": 0.92, "buyRise": 1.06, "recoverSeconds": 40 },
   "routeMode": "loop",
