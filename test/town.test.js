@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import * as T from '../js/town.js';
 const c = JSON.parse(fs.readFileSync(new URL('../data/town.json', import.meta.url)));
+c.routeMode = 'once'; c.stopMode = 'orders'; c.prices.mode = 'reactive'; // most checks below use single trips with reactive prices
 const run = (s, secs) => { const ev = []; for (let i = 0; i < secs * 20; i++) ev.push(...T.tick(c, s, 0.05)); return ev; };
 
 let s = T.createState(c);
@@ -42,4 +43,31 @@ s3.coins = 200; T.buyUpgrade(c, s3, 'cart'); assert.equal(T.capacity(c, s3), 15)
 const s4 = T.deserialize(c, T.serialize(s2));
 assert.deepEqual(s4.trip, s2.trip);
 assert.throws(() => T.deserialize(c, '{"coins":1}'));
+// loop mode keeps walking, stop request ends at next building, offline earns
+const cl = { ...c, routeMode: 'loop', stopMode: 'orders', prices: { ...c.prices, mode: 'fixed' } };
+const s5 = T.createState(cl); T.planAdd(cl, s5, 'farm'); T.toggleOrder(cl, s5, 0, 'apples'); T.planAdd(cl, s5, 'market');
+T.startTrip(s5); run.call(null, s5, 0);
+for (let i = 0; i < 600; i++) T.tick(cl, s5, 0.05);
+assert.ok(s5.trip, 'still looping'); assert.ok(s5.stats.trips >= 2, 'laps ' + s5.stats.trips);
+assert.equal(T.sellPrice(cl, s5, 'market', 'apples'), 4, 'fixed price');
+const g = T.applyOffline(cl, s5, 600); assert.ok(g > 0, 'offline gain ' + g);
+T.requestStop(s5); for (let i = 0; i < 400 && s5.trip; i++) T.tick(cl, s5, 0.05);
+assert.equal(s5.trip, null); assert.ok(['farm', 'market'].includes(s5.at));
+// manual trading: merchant waits at each stop
+const cm = { ...c, routeMode: 'loop', stopMode: 'manual', prices: { ...c.prices, mode: 'fixed' } };
+const s6 = T.createState(cm);
+assert.equal(T.tradingAt(s6), 'market');
+T.planAdd(cm, s6, 'farm'); T.planAdd(cm, s6, 'market'); T.startTrip(s6);
+assert.equal(T.tradingAt(s6), null);
+for (let i = 0; i < 200; i++) T.tick(cm, s6, 0.05);
+assert.ok(s6.trip.waiting); assert.equal(T.tradingAt(s6), 'farm');
+assert.equal(T.tradeBuy(cm, s6, 'apples', 1e9).n, 3);
+assert.equal(T.tradeBuy(cm, s6, 'wheat'), null, 'bag full');
+assert.equal(T.tradeSell(cm, s6, 'apples'), null, 'farm does not buy apples');
+T.continueTrip(cm, s6);
+for (let i = 0; i < 200; i++) T.tick(cm, s6, 0.05);
+assert.equal(T.tradingAt(s6), 'market');
+assert.equal(T.tradeSell(cm, s6, 'apples', 1e9).coins, 12);
+T.requestStop(s6); T.tick(cm, s6, 0.05);
+assert.equal(s6.trip, null); assert.equal(s6.at, 'market');
 console.log('town tests passed');

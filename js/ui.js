@@ -4,11 +4,11 @@ import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 
-export const BUILD = '0.3.0';
+export const BUILD = '0.4.0';
 
 const $ = sel => document.querySelector(sel);
 let c, s, map;
-let planKey = '', upKey = '';
+let planKey = '', upKey = '', tradeKey = '';
 
 export async function start() {
   c = await (await fetch('data/town.json', { cache: 'no-cache' })).json();
@@ -16,12 +16,12 @@ export async function start() {
   s = T.createState(c);
   const saved = S.loadSave();
   if (saved) { try { s = T.deserialize(c, saved); } catch (e) { console.warn('Bad save, starting fresh', e); } }
-  T.applyOffline(c, s, (Date.now() - s.lastSeen) / 1000);
 
   map = new TownMap($('#map'), c, () => s);
   bindMap();
   bindPanel();
   bindMenu();
+  catchUp();
 
   let last = performance.now();
   function frame(now) {
@@ -33,11 +33,32 @@ export async function start() {
   }
   requestAnimationFrame(frame);
   setInterval(save, 5000);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else catchUp(); });
   window.addEventListener('pagehide', save);
 }
 
 function save() { s.lastSeen = Date.now(); S.writeSave(T.serialize(s)); }
+
+// Run the time the app was closed or in the background.
+function catchUp() {
+  const secs = (Date.now() - s.lastSeen) / 1000;
+  s.lastSeen = Date.now();
+  if (secs < 3) return;
+  const looping = !!s.trip;
+  const gained = T.applyOffline(c, s, secs);
+  if (looping && gained > 0 && secs > 20) {
+    $('#away-time').textContent = fmtTime(secs);
+    $('#away-n').textContent = T.formatNumber(gained);
+    $('#away').hidden = false;
+  }
+  save();
+}
+
+function fmtTime(sec) {
+  if (sec < 60) return Math.round(sec) + 's';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm';
+  return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+}
 
 // ---------- map input: tap/trace to plan, tap to hurry ----------
 
@@ -46,6 +67,7 @@ function bindMap() {
   let tracing = false;
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
+    if (s.trip?.waiting) { pulse($('#trade'), 'shake'); sfx.deny(); return; }
     if (s.trip) {
       if (T.hurry(c, s)) { sfx.tap(); buzz(6); map.puff(); floatText(e.clientX, e.clientY - 10, '»', 'tap'); }
       return;
@@ -76,7 +98,10 @@ function addStop(b) {
 
 function handle(events) {
   for (const ev of events) {
-    if (ev.type === 'arrive') { map.poke(ev.b); buzz(8); }
+    if (ev.type === 'arrive') {
+      map.poke(ev.b); buzz(8);
+      if (c.stopMode === 'manual') { sfx.unlock(); $('#panel').scrollTo({ top: 0, behavior: 'smooth' }); }
+    }
     else if (ev.type === 'sell') {
       const [x, y] = map.buildingPagePos(ev.b);
       floatText(x, y - 20, `+${ev.coins} 🪙`, 'coin');
@@ -109,9 +134,22 @@ function showAchievement(id) {
 
 function bindPanel() {
   onPress($('#go'), () => {
-    if (s.trip) return;
+    if (s.trip) { if (T.requestStop(s)) { sfx.tap(); buzz(8); pulse($('#go'), 'squish'); } return; }
     if (T.startTrip(s)) { sfx.unlock(); buzz(12); pulse($('#go'), 'squish'); }
     else { sfx.deny(); pulse($('#go'), 'shake'); }
+  });
+  $('#trade').addEventListener('pointerdown', e => {
+    const btn = e.target.closest('[data-act]'); if (!btn) return;
+    e.preventDefault();
+    const g = btn.dataset.good, act = btn.dataset.act;
+    if (act === 'continue') { if (T.continueTrip(c, s)) { sfx.tap(); buzz(8); } return; }
+    const n = act.endsWith('all') ? 1e9 : 1;
+    const ev = act.startsWith('buy') ? T.tradeBuy(c, s, g, n) : T.tradeSell(c, s, g, n);
+    if (!ev) { sfx.deny(); pulse(btn, 'shake'); return; }
+    const r = btn.getBoundingClientRect();
+    if (ev.type === 'sell') { floatText(r.left + r.width / 2, r.top, `+${ev.coins} 🪙`, 'coin'); burst(r.left + r.width / 2, r.top, Math.min(10, 2 + ev.n)); sfx.coin(true); pulse($('#coins'), 'bump'); }
+    else { floatText(r.left + r.width / 2, r.top, `+${ev.n} ${c.goods[g].icon}`, 'hire'); sfx.hire(); pulse($('#bag'), 'bump'); }
+    buzz(8); pulse(btn, 'squish');
   });
   onPress($('#clear'), () => { if (!s.trip && s.plan.length) { T.planClear(s); sfx.tap(); } });
   // stop rows and upgrade buttons are rebuilt, so listen on the containers
@@ -131,6 +169,7 @@ function bindPanel() {
     if (btn.dataset.buy === 'horse') setTimeout(() => { $('#beyond').hidden = false; }, 600);
     save();
   });
+  onPress($('#away-ok'), (x, y) => { $('#away').hidden = true; burst(x, y, 16); sfx.coin(true); buzz(20); });
   onPress($('#beyond-ok'), () => { $('#beyond').hidden = true; sfx.tap(); });
 }
 
@@ -146,13 +185,42 @@ function render() {
   const key = JSON.stringify([s.plan, s.trip?.idx ?? -1, !!s.trip, s.plan.map(st => prices(st.b))]);
   if (key !== planKey) { planKey = key; renderPlan(); }
 
+  const tk = JSON.stringify([T.tradingAt(s), s.trip?.waiting, s.inv, s.coins, T.capacity(c, s)]);
+  if (tk !== tradeKey) { tradeKey = tk; renderTrade(); }
+
   const go = $('#go');
   go.classList.toggle('afford', !s.trip && s.plan.length > 0);
-  go.textContent = s.trip ? 'Walking… tap the map to hurry' : s.plan.length ? 'Go ▶' : 'Plan a route first';
+  go.classList.toggle('stop-btn', !!s.trip);
+  go.textContent = s.trip ? (s.trip.waiting ? '■ Stop here to change the route' : s.trip.stopRequested ? 'Stopping at the next building…' : '■ Stop to change the route')
+    : s.plan.length ? 'Go ▶ (repeats until stopped)' : 'Plan a route first';
+  $('#walk-hint').hidden = !s.trip || !!s.trip.waiting;
   $('#clear').hidden = !!s.trip || !s.plan.length;
 
   const uk = JSON.stringify([s.upgrades, s.coins >= 0 && c.upgrades.map(u => s.coins >= u.cost)]);
   if (uk !== upKey) { upKey = uk; renderUpgrades(); }
+}
+
+function renderTrade() {
+  const el = $('#trade'), b = T.tradingAt(s);
+  if (c.stopMode !== 'manual' || !b) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const d = c.buildings[b], rows = [];
+  for (const g in d.sells) {
+    const p = T.buyPrice(c, s, b, g), can = T.maxBuy(c, s, g) > 0;
+    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}</span><span class="tp buyp">🪙 ${p}</span>
+      <button class="tb buy1 ${can ? 'ok' : ''}" data-act="buy" data-good="${g}">Buy</button>
+      <button class="tb buy1 ${can ? 'ok' : ''}" data-act="buyall" data-good="${g}">Max</button></div>`);
+  }
+  for (const g in d.buys) {
+    const p = T.sellPrice(c, s, b, g), have = s.inv[g] || 0;
+    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}${have ? ` <i>×${have}</i>` : ''}</span><span class="tp sellp">🪙 ${p}</span>
+      <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sell" data-good="${g}">Sell</button>
+      <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sellall" data-good="${g}">All</button></div>`);
+  }
+  const waiting = s.trip?.waiting;
+  el.innerHTML = `<div class="sec-head"><b>${waiting ? 'Arrived at' : 'Trading at'} ${d.icon} ${d.name}</b></div>
+    <div class="tcard">${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
+    ${waiting ? `<button class="btn go afford" data-act="continue">Walk on ▶</button>` : ''}</div>`;
 }
 
 function prices(b) {
@@ -166,7 +234,7 @@ function renderPlan() {
   const el = $('#plan');
   if (!s.plan.length) {
     el.innerHTML = `<p class="hint">Tap buildings on the map in the order you want to visit them, or drag your finger through them.
-      Then pick what to buy <span class="g">🟢</span> or sell <span class="y">🟡</span> at each stop.</p>`;
+      ${c.stopMode === 'manual' ? 'The merchant will stop at each one so you can trade.' : 'Then pick what to buy or sell at each stop.'}</p>`;
     return;
   }
   el.innerHTML = s.plan.map((st, i) => {
@@ -177,7 +245,7 @@ function renderPlan() {
     for (const g in d.buys) chips.push(chip(i, g, 'sell', T.sellPrice(c, s, st.b, g), st.orders[g] === 'sell'));
     return `<div class="stop ${state}">
       <div class="stop-head"><b class="num">${i + 1}</b><span>${d.icon} ${d.name}</span>${s.trip ? '' : `<button class="rm" data-rm="${i}" aria-label="Remove stop">✕</button>`}</div>
-      <div class="chips">${chips.join('')}</div></div>`;
+      ${c.stopMode === 'manual' ? '' : `<div class="chips">${chips.join('')}</div>`}</div>`;
   }).join('');
 }
 

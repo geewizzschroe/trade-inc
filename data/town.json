@@ -6,8 +6,10 @@
   "walkSpeed": 140,
   "stopPause": 0.35,
   "hurryDistance": 28,
-  "prices": { "mode": "reactive", "sellDrop": 0.92, "buyRise": 1.06, "recoverSeconds": 40 },
-  "routeMode": "once",
+  "prices": { "mode": "fixed", "sellDrop": 0.92, "buyRise": 1.06, "recoverSeconds": 40 },
+  "routeMode": "loop",
+  "stopMode": "manual",
+  "offlineCapHours": 8,
   "goods": {
     "apples": { "name": "Apples", "icon": "🍎" },
     "wheat":  { "name": "Wheat",  "icon": "🌾" },

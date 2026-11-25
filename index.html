@@ -19,9 +19,11 @@
 <canvas id="map"></canvas>
 
 <main id="panel">
+  <section id="trade" class="sec" hidden></section>
   <section class="sec">
     <div class="sec-head"><b>Route</b><button id="clear" class="link">Clear</button></div>
     <div id="plan"></div>
+    <p id="walk-hint" class="hint center-hint" hidden>Walking the route on repeat. Tap the map to hurry!</p>
     <button id="go" class="btn go">Plan a route first</button>
   </section>
   <section class="sec">
@@ -51,6 +53,15 @@
     <button id="reset" class="btn danger">Reset game</button>
     <button id="update" class="btn">Update now</button>
     <p class="small">Build <span id="build"></span></p>
+  </div>
+</div>
+
+<div id="away" class="sheet" hidden>
+  <div class="panel center">
+    <div class="big">🚶🪙</div>
+    <p>While you were away for <b id="away-time"></b>, your merchant kept walking and earned</p>
+    <div class="away-n">🪙 <b id="away-n"></b></div>
+    <button id="away-ok" class="btn afford">Collect</button>
   </div>
 </div>
 

@@ -118,3 +118,18 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .away-n{font-size:34px;color:var(--gold);margin:8px 0 16px}
 .panel.center .btn{margin:0 auto}
 #update{width:100%;margin-top:12px}
+.center-hint{text-align:center;padding:8px}
+.hint[hidden]{display:none}
+.go.stop-btn{background:#5a3a3a;color:#ffd9d4;box-shadow:0 4px 0 #2e1c1c;font-size:15px}
+#trade[hidden]{display:none}
+.tcard{background:var(--card2);border-radius:12px;padding:6px 10px 10px;border:2px solid var(--gold)}
+.trow{display:grid;grid-template-columns:1fr auto 64px 56px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.trow:last-of-type{border-bottom:0}
+.tg{font-size:16px;font-weight:600}
+.tg i{font-style:normal;color:var(--gold);font-size:14px}
+.tp{font-size:15px;font-variant-numeric:tabular-nums;text-align:right;padding-right:4px}
+.tb{min-height:42px;border-radius:10px;font-weight:700;font-size:14px;background:#2a3d50;color:#6f8396;box-shadow:0 3px 0 #16263a}
+.tb:active{transform:translateY(2px);box-shadow:0 1px 0 #16263a}
+.tb.buy1.ok{background:linear-gradient(var(--green),#3fa55e);color:#06210f;box-shadow:0 3px 0 #2a6e3e}
+.tb.sell1.ok{background:linear-gradient(var(--gold),var(--gold2));color:#2b1d00;box-shadow:0 3px 0 #7a5100}
+.tcard .go{margin-top:10px}

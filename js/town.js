@@ -42,13 +42,13 @@ function mult(s, b, g) {
 export function buyPrice(c, s, b, g) {
   const base = c.buildings[b].sells[g];
   if (base == null) return null;
-  return Math.max(1, Math.round(base * (s.priceMult[b]?.[g]?.buy ?? 1)));
+  return Math.max(1, Math.round(base * (c.prices.mode === 'reactive' ? (s.priceMult[b]?.[g]?.buy ?? 1) : 1)));
 }
 // What the building pays you for one unit.
 export function sellPrice(c, s, b, g) {
   const base = c.buildings[b].buys[g];
   if (base == null) return null;
-  return Math.max(1, Math.round(base * (s.priceMult[b]?.[g]?.sell ?? 1)));
+  return Math.max(1, Math.round(base * (c.prices.mode === 'reactive' ? (s.priceMult[b]?.[g]?.sell ?? 1) : 1)));
 }
 
 // ---------- planning ----------
@@ -110,6 +110,7 @@ export function tick(c, s, dt) {
   let guard = 0;
   while (s.trip && budget > 0 && guard++ < 50) {
     const tr = s.trip;
+    if (tr.waiting) break;
     if (tr.pause > 0) {
       const used = Math.min(tr.pause, budget);
       tr.pause -= used; budget -= used;
@@ -135,6 +136,7 @@ export function tick(c, s, dt) {
 function arrive(c, s, ev) {
   const st = s.plan[s.trip.idx];
   ev.push({ type: 'arrive', b: st.b });
+  if (c.stopMode === 'manual') { s.trip.waiting = true; return; }
   // Sell first, so the coins can pay for buying.
   for (const g in st.orders) if (st.orders[g] === 'sell') {
     let n = 0, got = 0;
@@ -170,18 +172,15 @@ function arrive(c, s, ev) {
 function advance(c, s, ev) {
   const tr = s.trip;
   tr.idx++; tr.leg = 0;
-  if (tr.idx >= s.plan.length) {
-    s.at = s.plan[s.plan.length - 1].b;
+  const stopping = tr.stopRequested;
+  if (tr.idx >= s.plan.length || stopping) {
+    s.at = s.plan[tr.idx - 1].b;
     s.stats.trips++;
     const profit = s.coins - tr.startCoins;
     s.trip = null;
     ev.push({ type: 'done', profit });
     if (profit > 0) unlockAch(s, 'firstProfit', ev);
-    if (c.routeMode === 'loop' && s.plan.length > 1) {
-      // Loop: rotate so the walk starts from where we stand.
-      if (s.plan[0].b === s.at) s.plan.push(s.plan.shift());
-      startTrip(s);
-    }
+    if (c.routeMode === 'loop' && !stopping) startTrip(s);
   }
 }
 
@@ -214,9 +213,68 @@ function unlockAch(s, id, ev) {
   ev.push({ type: 'achievement', id });
 }
 
-// Time away: prices recover. (Trips only move while you watch for now.)
+// ---------- trading by hand ----------
+
+// The building the merchant can trade with right now, or null while walking.
+export function tradingAt(s) {
+  if (!s.trip) return s.at;
+  if (s.trip.waiting) return s.plan[s.trip.idx].b;
+  return null;
+}
+
+export function maxBuy(c, s, g) {
+  const b = tradingAt(s); if (!b) return 0;
+  const p = buyPrice(c, s, b, g); if (p == null) return 0;
+  return Math.max(0, Math.min(Math.floor(s.coins / p), capacity(c, s) - carried(s)));
+}
+
+export function tradeBuy(c, s, g, n = 1) {
+  const b = tradingAt(s);
+  n = Math.min(n, maxBuy(c, s, g));
+  if (!b || n <= 0) return null;
+  const p = buyPrice(c, s, b, g);
+  s.coins -= p * n; s.inv[g] = (s.inv[g] || 0) + n;
+  return { type: 'buy', b, good: g, n, coins: p * n };
+}
+
+export function tradeSell(c, s, g, n = 1) {
+  const b = tradingAt(s);
+  const p = b && sellPrice(c, s, b, g);
+  n = Math.min(n, s.inv[g] || 0);
+  if (!p || n <= 0) return null;
+  s.inv[g] -= n; if (!s.inv[g]) delete s.inv[g];
+  s.coins += p * n; s.stats.earned += p * n;
+  return { type: 'sell', b, good: g, n, coins: p * n };
+}
+
+// Done trading at this stop: walk on.
+export function continueTrip(c, s) {
+  if (!s.trip?.waiting) return false;
+  s.trip.waiting = false;
+  s.trip.pause = c.stopPause * 0.5;
+  return true;
+}
+
+// Ask the merchant to stop at the next building they reach.
+export function requestStop(s) {
+  if (!s.trip) return false;
+  s.trip.stopRequested = true;
+  if (s.trip.waiting) { s.trip.waiting = false; s.trip.pause = 0.001; }
+  return true;
+}
+
+// Time away: a looping merchant keeps walking. Returns coins gained.
 export function applyOffline(c, s, seconds) {
-  recoverPrices(c, s, Math.min(seconds, 3600));
+  const secs = Math.min(seconds, (c.offlineCapHours || 8) * 3600);
+  const before = s.coins;
+  const step = 0.5;
+  let t = 0;
+  while (t < secs) {
+    const dt = Math.min(step, secs - t);
+    if (!s.trip || s.trip.waiting) { recoverPrices(c, s, secs - t); break; }
+    tick(c, s, dt); t += dt;
+  }
+  return s.coins - before;
 }
 
 // ---------- saves ----------
