@@ -156,3 +156,9 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .ig.buy{color:#8fe0a2}.ig.sell{color:#f5c542}.ig.none{color:var(--mute)}
 .bagtext{font-size:13px;color:var(--ink);background:#13283b;padding:4px 8px;border-radius:8px;white-space:nowrap}
 #bag{max-width:150px}
+#hires[hidden]{display:none}
+.hire{background:var(--card);border-radius:12px;padding:10px;margin-bottom:8px;border:2px solid transparent}
+.hire.editing{border-color:#6fd3e8}
+.hire .stop-head small{color:var(--mute);font-size:12px;font-weight:500}
+.hire-sub{color:var(--mute);font-size:13px;margin:4px 0}
+.btn.stop-btn{background:#5a3a3a;color:#ffd9d4;box-shadow:0 4px 0 #2e1c1c}

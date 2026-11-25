@@ -5,14 +5,15 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.7.0';
+export const BUILD = '0.8.0';
 
 const $ = sel => document.querySelector(sel);
-let c, s, maps, selected = null;
-let planKey = '', upKey = '', tradeKey = '', infoKey = '';
+let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
+let planKey = '', upKey = '', tradeKey = '', infoKey = '', hireKey = '';
 
 const view = () => s.view;            // 'town' | 'land'
 const map = () => maps[s.view];
+const planLevel = () => editing || view();
 
 export async function start() {
   c = await (await fetch('data/world.json', { cache: 'no-cache' })).json();
@@ -77,6 +78,7 @@ function setView(v, quiet) {
   if (v === 'town' && !s.town) return;
   if (v === 'land' && !G.landUnlocked(c, s)) return;
   s.view = v; selected = null; maps.land.selected = null;
+  if (v !== 'land') setEditing(null);
   planKey = tradeKey = infoKey = '';
   const cv = $('#map');
   pulse(cv, v === 'land' ? 'zoom-out' : 'zoom-in');
@@ -107,14 +109,14 @@ function bindMap() {
     if (pts.size === 2) { pinchStart = spread(); pinched = false; tracing = false; return; }
     if (pts.size > 2) return;
     const L = G.activeLevel(s);
-    if (L === view()) {
+    if (L === view() && !editing) {
       const tr = G.route(s, L).trip;
       if (tr.atStop) { pulse($('#trade'), 'shake'); sfx.deny(); return; }
       if (G.hurry(c, s)) { sfx.tap(); buzz(6); map().puff(); floatText(e.clientX, e.clientY - 10, '»', 'tap'); }
       return;
     }
     downAt = map().hitNode(e.clientX, e.clientY);
-    tracing = G.canPlan(c, s, view()); traced = 0;
+    tracing = G.canPlan(c, s, planLevel()); traced = 0;
   });
   cv.addEventListener('pointermove', e => {
     if (!pts.has(e.pointerId)) return;
@@ -149,30 +151,31 @@ function bindMap() {
 // (tapping the town you're in goes into it).
 function tapNode(id) {
   if (view() === 'town') { addStop(id); return; }
-  if (id === s.town && !G.activeLevel(s)) { setView('town'); return; }
+  if (id === s.town && !G.activeLevel(s) && !editing) { setView('town'); return; }
   selected = id; maps.land.selected = id; infoKey = '';
   $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
   sfx.tap(); buzz(4); map().poke(id);
 }
 
 function addStop(id) {
-  if (!id || !G.planAdd(c, s, view(), id)) return false;
+  if (!id || !G.planAdd(c, s, planLevel(), id)) return false;
   sfx.tap(); buzz(5); map().poke(id);
   const p = map().nodePagePos(id);
-  if (p) floatText(p[0], p[1] - 30, String(G.route(s, view()).plan.length), 'tap');
+  if (p) floatText(p[0], p[1] - 30, String(G.route(s, planLevel()).plan.length), 'tap');
   return true;
 }
 
 // ---------- events from the simulation ----------
 
 function posFor(level, id) {
-  if (level === view()) { const p = map().nodePagePos(id); if (p) return p; }
+  if (level === view() || (G.isHire(level) && view() === 'land')) { const p = map().nodePagePos(id); if (p) return p; }
   const r = $('#map').getBoundingClientRect();
   return [r.left + r.width / 2, r.top + r.height / 2];
 }
 
 function handle(events) {
   for (const ev of events) {
+    if (G.isHire(ev.level) && ev.type !== 'sell') continue; // hired merchants: only their sales make noise
     if (ev.type === 'arrive') {
       if (ev.level === view()) map().poke(ev.b);
       buzz(8);
@@ -182,7 +185,8 @@ function handle(events) {
       const [x, y] = posFor(ev.level, ev.b);
       floatText(x, y - 20, `+${G.formatNumber(ev.coins)} 🪙`, 'coin');
       burst(x, y, Math.min(10, 3 + ev.n), '🪙');
-      sfx.coin(true); pulse($('#coins'), 'bump');
+      if (!G.isHire(ev.level)) sfx.coin(true); else sfx.coin(false);
+      pulse($('#coins'), 'bump');
     } else if (ev.type === 'buy') {
       const [x, y] = posFor(ev.level, ev.b);
       floatText(x + 20, y - 4, `+${ev.n} ${c.goods[ev.good].icon}`, 'hire');
@@ -209,16 +213,23 @@ function showAchievement(id) {
 function bindPanel() {
   onPress($('#view-btn'), () => setView(s.view === 'town' ? 'land' : 'town'));
   onPress($('#go'), () => {
+    if (editing) {
+      const r = G.route(s, editing);
+      if (r.trip) { G.hireStop(c, s, editing); sfx.tap(); }
+      else if (G.startTrip(c, s, editing)) { sfx.unlock(); buzz(12); setEditing(null); }
+      else { sfx.deny(); pulse($('#go'), 'shake'); }
+      return;
+    }
     const L = G.activeLevel(s);
     if (L) { if (L === view() && G.requestStop(c, s)) { sfx.tap(); buzz(8); pulse($('#go'), 'squish'); } return; }
     if (G.startTrip(c, s, view())) { sfx.unlock(); buzz(12); pulse($('#go'), 'squish'); }
     else { sfx.deny(); pulse($('#go'), 'shake'); }
   });
-  onPress($('#clear'), () => { G.planClear(c, s, view()); sfx.tap(); });
+  onPress($('#clear'), () => { G.planClear(c, s, planLevel()); sfx.tap(); });
   $('#plan').addEventListener('pointerdown', e => {
     const chip = e.target.closest('[data-good]'), rm = e.target.closest('[data-rm]');
-    if (chip) { e.preventDefault(); G.toggleOrder(c, s, view(), +chip.dataset.i, chip.dataset.good); sfx.tap(); buzz(4); }
-    else if (rm) { e.preventDefault(); G.planRemove(c, s, view(), +rm.dataset.rm); sfx.tap(); }
+    if (chip) { e.preventDefault(); G.toggleOrder(c, s, planLevel(), +chip.dataset.i, chip.dataset.good); sfx.tap(); buzz(4); }
+    else if (rm) { e.preventDefault(); G.planRemove(c, s, planLevel(), +rm.dataset.rm); sfx.tap(); }
   });
   $('#trade').addEventListener('pointerdown', e => {
     const btn = e.target.closest('[data-act]'); if (!btn) return;
@@ -240,6 +251,19 @@ function bindPanel() {
     else if (btn.dataset.info === 'enter') setView('town');
     else { selected = null; maps.land.selected = null; infoKey = ''; sfx.tap(); }
   });
+  $('#hires').addEventListener('pointerdown', e => {
+    const btn = e.target.closest('[data-h]'); if (!btn) return;
+    e.preventDefault();
+    const act = btn.dataset.h, lv = btn.dataset.lv;
+    if (act === 'hire') {
+      const evs = G.hire(c, s);
+      if (!evs) { sfx.deny(); pulse(btn, 'shake'); return; }
+      const r = btn.getBoundingClientRect(); burst(r.left + r.width / 2, r.top, 14, '🧑'); sfx.unlock(); buzz([10, 40, 20]);
+      handle(evs); setEditing('hire:' + evs[0].id); save();
+    } else if (act === 'edit') { setEditing(editing === lv ? null : lv); sfx.tap(); }
+    else if (act === 'stop') { G.hireStop(c, s, lv); sfx.tap(); }
+    else if (act === 'start') { if (G.startTrip(c, s, lv)) { sfx.unlock(); buzz(12); if (editing === lv) setEditing(null); } else { sfx.deny(); pulse(btn, 'shake'); } }
+  });
   $('#upgrades').addEventListener('pointerdown', e => {
     const btn = e.target.closest('[data-buy]'); if (!btn) return;
     e.preventDefault();
@@ -258,7 +282,7 @@ function bindPanel() {
 }
 
 function nodeName(level, id) {
-  if (level === 'land') { const t = c.towns[id]; return `${t.icon} ${t.name}`; }
+  if (level === 'land' || G.isHire(level)) { const t = c.towns[id]; return `${t.icon} ${t.name}`; }
   const b = c.towns[G.currentTown(s)].buildings[id] || Object.values(c.towns).map(t => t.buildings[id]).find(Boolean);
   return `${b.icon} ${b.name}`;
 }
@@ -273,7 +297,7 @@ function render() {
     : `<span class="bagtext">${Object.entries(s.inv).map(([g, n]) => c.goods[g].icon + n).join(' ') || 'Empty'} · ${G.carried(s)}/${cap}</span>`;
   if ($('#bag').dataset.k !== bagHtml) { $('#bag').dataset.k = bagHtml; $('#bag').innerHTML = bagHtml; }
 
-  const L = view(), r = G.route(s, L);
+  const L = planLevel(), r = G.route(s, L);
   const key = JSON.stringify([L, r?.plan, r?.trip?.idx ?? -1, !!r?.trip, G.ordersUnlocked(c, s), G.canPlan(c, s, L), G.activeLevel(s)]);
   if (key !== planKey) { planKey = key; renderPlan(); }
 
@@ -282,10 +306,11 @@ function render() {
   if (tk !== tradeKey) { tradeKey = tk; renderTrade(); }
   updateStay();
 
-  const ik = JSON.stringify([selected, s.visited, L, s.town, G.route(s, 'land').plan.length]);
+  const ik = JSON.stringify([selected, s.visited, view(), s.town, editing, r?.plan.length]);
   if (ik !== infoKey) { infoKey = ik; renderInfo(); }
 
-  $('#route-title').textContent = L === 'land' ? 'Land route' : `Route in ${c.towns[G.currentTown(s)].name}`;
+  const H = editing && G.hireOf(s, editing);
+  $('#route-title').textContent = H ? `${H.name}'s route (up to ${G.management(c, s).stops} towns)` : L === 'land' ? 'Land route' : `Route in ${c.towns[G.currentTown(s)].name}`;
   const ls = G.loopSeconds(c, s, L);
   $('#loop-time').textContent = ls ? `≈ ${fmtTime(ls)} per loop` : '';
 
@@ -300,16 +325,24 @@ function render() {
   if (A === 'town' && L === 'land') go.classList.toggle('afford', !!r.plan.length);
   $('#walk-hint').hidden = !(A === L && !tr.atStop);
   $('#clear').hidden = !G.canPlan(c, s, L) || !r?.plan.length;
+  if (H) {
+    go.classList.toggle('afford', !r.trip && !!r.plan.length);
+    go.classList.toggle('stop-btn', !!r.trip);
+    go.textContent = r.trip ? `■ Stop ${H.name}'s route` : r.plan.length ? `Send ${H.name} ▶ (repeats until stopped)` : `Tap towns to plan ${H.name}'s route`;
+    $('#walk-hint').hidden = true;
+  }
+  const hk = JSON.stringify([editing, s.hires.map(h => [h.route.at, h.route.plan.length, h.route.trip?.idx, h.route.trip?.atStop, h.inv]), G.management(c, s), s.coins >= G.hireCost(c, s)]);
+  if (hk !== hireKey) { hireKey = hk; renderHires(); }
 
   const uk = JSON.stringify([s.upgrades, c.upgrades.map(u => s.coins >= u.cost)]);
   if (uk !== upKey) { upKey = uk; renderUpgrades(); }
 }
 
 function renderPlan() {
-  const el = $('#plan'), L = view(), r = G.route(s, L);
+  const el = $('#plan'), L = planLevel(), r = G.route(s, L);
   if (!r) { el.innerHTML = ''; return; }
   if (!r.plan.length) {
-    el.innerHTML = `<p class="hint">${L === 'land'
+    el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders, so give each stop some.' : L === 'land'
       ? 'Tap a town to see what it buys and sells, then add it to your route. You can also drag your finger through towns. Tap the town you are in to go back into it.'
       : 'Tap buildings on the map in the order you want to visit them, or drag your finger through them.'}
       ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant stays a day at each stop so you can trade.'}</p>`;
@@ -373,6 +406,34 @@ function updateStay() {
   const w = $('#walk-on'); if (w) { const l = tr.go ? "Walking on at day's end" : 'Walk on ▶'; if (w.textContent !== l) w.textContent = l; }
 }
 
+function setEditing(lv) {
+  editing = lv; maps.land.editing = lv;
+  planKey = hireKey = infoKey = '';
+  if (lv && s.view !== 'land') setView('land');
+  if (lv) $('#panel').scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderHires() {
+  const el = $('#hires'), m = G.management(c, s);
+  if (!m.level) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const cards = s.hires.map(h => {
+    const lv = 'hire:' + h.id, r = h.route, tr = r.trip;
+    const where = tr ? (tr.atStop ? `at ${c.towns[r.plan[tr.idx].b].name}` : `riding to ${c.towns[r.plan[tr.idx].b].name}`) : `waiting in ${c.towns[r.at].name}`;
+    const cargo = Object.entries(h.inv).map(([g, n]) => c.goods[g].icon + n).join(' ') || 'empty';
+    const stops = r.plan.map(p => c.towns[p.b].icon).join(' → ') || 'no route yet';
+    return `<div class="hire ${editing === lv ? 'editing' : ''}">
+      <div class="stop-head"><span>🧑 ${h.name}</span><small>${where}</small></div>
+      <div class="hire-sub">${stops} · cargo ${cargo}</div>
+      <div class="btnrow"><button class="btn" data-h="edit" data-lv="${lv}">${editing === lv ? 'Done editing' : 'Edit route'}</button>
+        ${tr ? `<button class="btn stop-btn" data-h="stop" data-lv="${lv}">Stop</button>` : `<button class="btn ${r.plan.length ? 'afford' : ''}" data-h="start" data-lv="${lv}">Send ▶</button>`}</div></div>`;
+  }).join('');
+  const full = s.hires.length >= m.hires, cost = G.hireCost(c, s);
+  el.innerHTML = `<div class="sec-head"><b>Merchants ${s.hires.length}/${m.hires}</b></div>${cards}
+    ${full ? '<p class="hint">Raise your Management skill to hire more.</p>' : `<div class="up"><div class="up-icon">🧑</div><div class="up-text"><b>Hire a merchant</b><span>Starts in the town you're in, carries 15 goods, rides on standing orders.</span></div>
+      <button class="buy ${s.coins >= cost ? 'afford' : ''}" data-h="hire">HIRE · 🪙 ${G.formatNumber(cost)}</button></div>`}`;
+}
+
 // Land map: the card for a tapped town, with price estimates.
 function renderInfo() {
   const el = $('#info');
@@ -391,7 +452,7 @@ function renderInfo() {
     <div class="irow"><b>Sells to you</b>${rows.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="irow"><b>Buys from you</b>${sells.join('') || '<span class="ig none">nothing</span>'}</div>
     <div class="btnrow">${here && !G.activeLevel(s) ? '<button class="btn" data-info="enter">Enter town</button>' : ''}
-      <button class="btn ${G.canPlan(c, s, 'land') ? 'afford' : ''}" data-info="add">Add to route</button></div></div>`;
+      <button class="btn ${G.canPlan(c, s, planLevel()) ? 'afford' : ''}" data-info="add">${editing ? `Add to ${G.hireOf(s, editing).name}'s route` : 'Add to route'}</button></div></div>`;
 }
 
 function renderUpgrades() {
@@ -426,14 +487,14 @@ function bindMenu() {
     catch { msg.textContent = 'Save is in the box above. Copy it somewhere safe.'; }
   });
   onPress($('#import'), () => {
-    try { s = G.deserialize(c, box.value.trim()); save(); resetKeys(); msg.textContent = 'Save loaded.'; sfx.unlock(); }
+    try { s = G.deserialize(c, box.value.trim()); save(); setEditing(null); resetKeys(); msg.textContent = 'Save loaded.'; sfx.unlock(); }
     catch { msg.textContent = 'That text is not a valid save.'; sfx.deny(); }
   });
   let armed = false;
   const reset = $('#reset');
   onPress(reset, () => {
     if (!armed) { armed = true; reset.textContent = 'Tap again to erase everything'; setTimeout(() => { armed = false; reset.textContent = 'Reset game'; }, 3000); return; }
-    S.clearSave(); s = G.createState(c); save(); resetKeys();
+    S.clearSave(); s = G.createState(c); save(); setEditing(null); resetKeys();
     armed = false; reset.textContent = 'Reset game'; menu.hidden = true;
   });
   onPress($('#update'), async () => {

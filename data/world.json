@@ -434,6 +434,45 @@
    "desc": "Carry 40 goods.",
    "capacity": 40,
    "needs": "horse"
+  },
+  {
+   "id": "mgmt1",
+   "name": "Management I",
+   "icon": "📒",
+   "cost": 1500,
+   "desc": "Hire 1 merchant to ride a route of up to 2 towns on standing orders.",
+   "needs": "horse",
+   "management": {
+    "level": 1,
+    "hires": 1,
+    "stops": 2
+   }
+  },
+  {
+   "id": "mgmt2",
+   "name": "Management II",
+   "icon": "📗",
+   "cost": 6000,
+   "desc": "Up to 3 merchants, routes of up to 3 towns.",
+   "needs": "mgmt1",
+   "management": {
+    "level": 2,
+    "hires": 3,
+    "stops": 3
+   }
+  },
+  {
+   "id": "mgmt3",
+   "name": "Management III",
+   "icon": "📘",
+   "cost": 25000,
+   "desc": "Up to 6 merchants, routes of up to 5 towns.",
+   "needs": "mgmt2",
+   "management": {
+    "level": 3,
+    "hires": 6,
+    "stops": 5
+   }
   }
  ],
  "achievements": {
@@ -448,6 +487,29 @@
   "firstTown": {
    "name": "Over the Hills",
    "desc": "Visited another town."
+  },
+  "firstHire": {
+   "name": "Not Alone",
+   "desc": "Hired your first merchant."
   }
+ },
+ "hiring": {
+  "baseCost": 1200,
+  "costGrowth": 1.9,
+  "capacity": 15,
+  "names": [
+   "Ada",
+   "Bram",
+   "Cora",
+   "Dov",
+   "Elsa",
+   "Finn",
+   "Greta",
+   "Hob",
+   "Iris",
+   "Jory",
+   "Kett",
+   "Lume"
+  ]
  }
 }

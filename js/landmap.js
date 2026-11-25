@@ -6,7 +6,7 @@ export class LandMap {
   constructor(canvas, content, getState) {
     this.c = canvas; this.ctx = canvas.getContext('2d'); this.level = 'land';
     this.content = content; this.getState = getState;
-    this.bounce = {}; this.puffs = []; this.selected = null;
+    this.bounce = {}; this.puffs = []; this.selected = null; this.editing = null;
     this.roads = buildRoads(content.towns);
     this.resize();
   }
@@ -42,7 +42,8 @@ export class LandMap {
   puff() { const p = this.getState().land.pos; this.puffs.push({ x: p.x, y: p.y, t: 0, dx: Math.random() * 30 - 15 }); }
 
   draw(dt, now) {
-    const ctx = this.ctx, c = this.content, st = this.getState(), r = st.land, S = this.scale;
+    const ctx = this.ctx, c = this.content, st = this.getState(), S = this.scale;
+    const me = st.land, r = (this.editing && G.route(st, this.editing)) || me;
     // sea and land
     ctx.fillStyle = '#16304a'; ctx.fillRect(0, 0, this.w, this.h);
     ctx.beginPath();
@@ -66,7 +67,7 @@ export class LandMap {
     if (r.plan.length) {
       const pts = [c.towns[r.trip ? r.trip.from : r.at], ...r.plan.map(p => c.towns[p.b])];
       ctx.save(); ctx.setLineDash([10, 8]); ctx.lineDashOffset = -now / 40;
-      ctx.strokeStyle = 'rgba(245,197,66,0.95)'; ctx.lineWidth = 4; ctx.beginPath();
+      ctx.strokeStyle = this.editing ? 'rgba(111,211,232,0.95)' : 'rgba(245,197,66,0.95)'; ctx.lineWidth = 4; ctx.beginPath();
       pts.forEach((p, i) => { const [x, y] = this.toScreen(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
       ctx.stroke(); ctx.restore();
     }
@@ -107,8 +108,19 @@ export class LandMap {
       ctx.globalAlpha = 1 - p.t / 0.5; ctx.font = '16px system-ui'; ctx.textAlign = 'center';
       ctx.fillText('💨', x + p.dx - p.t * 40, y + 10 - p.t * 20); ctx.globalAlpha = 1;
     }
+    // hired merchants
+    st.hires.forEach((h, i) => {
+      const hr = h.route, [hx, hy] = this.toScreen(hr.pos.x, hr.pos.y);
+      const moving = hr.trip && !hr.trip.atStop;
+      const ox = moving ? 0 : -26 + (i % 3) * 10, oy = moving ? -10 : 18 + Math.floor(i / 3) * 8;
+      ctx.font = '18px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🐴', hx + ox, hy + oy - (moving ? Math.abs(Math.sin(now / 90 + i)) * 3 : 0));
+      if (this.editing === 'hire:' + h.id) label(ctx, h.name, hx + ox, hy + oy - 16, '700 11px system-ui', '#6fd3e8');
+      ctx.textBaseline = 'alphabetic';
+    });
     // rider
     if (G.landUnlocked(c, st)) {
+      const r = me;
       const [mx, my] = this.toScreen(r.pos.x, r.pos.y);
       const moving = r.trip && !r.trip.atStop;
       const bob = moving ? Math.abs(Math.sin(now / 80)) * 3 : 0;

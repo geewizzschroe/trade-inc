@@ -68,3 +68,25 @@ assert.equal(m.coins, 42); assert.equal(m.locals.millbrook.at, 'farm'); assert.e
 assert.equal(m.stats.trips, 3); assert.equal(m.town, 'millbrook');
 const rt = G.deserialize(c, G.serialize(s)); assert.deepEqual(rt.land, s.land);
 console.log('game tests passed');
+{
+  // hiring: management gates, hire runs its own land route with its own cargo
+  const s = G.createState(c); s.coins = 50000;
+  for (const u of ['horse', 'orders', 'mgmt1']) G.buyUpgrade(c, s, u);
+  assert.deepEqual(G.management(c, s), { level: 1, hires: 1, stops: 2 });
+  const ev = G.hire(c, s); assert.equal(ev[0].name, 'Ada'); assert.ok(ev.some(e => e.id === 'firstHire'));
+  assert.equal(G.hire(c, s), null, 'only one hire at level 1');
+  const L = 'hire:1';
+  assert.ok(G.planAdd(c, s, L, 'vinehollow')); G.toggleOrder(c, s, L, 0, 'wine');
+  assert.ok(G.planAdd(c, s, L, 'kingsport')); G.toggleOrder(c, s, L, 1, 'wine');
+  assert.ok(!G.planAdd(c, s, L, 'saltmere'), 'max 2 stops');
+  assert.ok(G.startTrip(c, s, L));
+  assert.equal(G.activeLevel(s), null, 'player still free'); assert.equal(s.town, 'millbrook');
+  const c0 = s.coins;
+  for (let t = 0; t < 200; t += 0.05) G.tick(c, s, 0.05);
+  assert.ok(s.coins > c0, 'hire earns ' + (s.coins - c0));
+  assert.deepEqual(s.inv, {}, 'player cargo untouched');
+  const c1 = s.coins; G.applyOffline(c, s, 3600); assert.ok(s.coins > c1 + 1000, 'hire earns offline');
+  G.buyUpgrade(c, s, 'mgmt2'); assert.ok(G.hireCost(c, s) > 1200); assert.ok(G.hire(c, s));
+  const rt = G.deserialize(c, G.serialize(s)); assert.equal(rt.hires.length, 2);
+  console.log('hire tests passed');
+}

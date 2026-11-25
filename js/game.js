@@ -29,6 +29,7 @@ export function createState(c) {
     land: newRoute(c.startTown, home),
     visited: { [c.startTown]: true },
     view: 'town',
+    hires: [],                         // hired merchants: { id, name, route, inv }
     lastSeen: Date.now(),
   };
 }
@@ -56,8 +57,16 @@ export function landUnlocked(c, s) { return c.upgrades.some(u => u.unlocksLand &
 // The town whose buildings the town level refers to.
 export function currentTown(s) { return s.town ?? s.land.at; }
 
+// Levels: 'town', 'land' (you), or 'hire:<id>' (a hired merchant's land route).
+export const isHire = level => typeof level === 'string' && level.startsWith('hire:');
+const landLike = level => level === 'land' || isHire(level);
+export function hireOf(s, level) { return s.hires.find(h => 'hire:' + h.id === level); }
+function invOf(s, level) { return isHire(level) ? hireOf(s, level).inv : s.inv; }
+function capFor(c, s, level) { return isHire(level) ? c.hiring.capacity : capacity(c, s); }
+
 export function route(s, level) {
   if (level === 'land') return s.land;
+  if (isHire(level)) return hireOf(s, level)?.route;
   const t = currentTown(s);
   return s.locals[t];
 }
@@ -70,15 +79,15 @@ function ensureLocal(c, s, townId) {
 }
 
 function nodes(c, s, level) {
-  return level === 'land' ? c.towns : c.towns[currentTown(s)].buildings;
+  return landLike(level) ? c.towns : c.towns[currentTown(s)].buildings;
 }
-function speedFor(c, s, level) { return level === 'land' ? rideSpeed(c, s) : walkSpeed(c, s); }
+function speedFor(c, s, level) { return isHire(level) ? c.rideSpeed : level === 'land' ? rideSpeed(c, s) : walkSpeed(c, s); }
 function hurryFor(c, level) { return level === 'land' ? c.landHurry : c.hurryDistance; }
 
 // What a stop buys and sells. A town on the land level trades as one market:
 // the cheapest seller and the best buyer among its buildings.
 export function market(c, level, id) {
-  if (level !== 'land') { const b = findBuilding(c, id); return { sells: b.sells, buys: b.buys }; }
+  if (!landLike(level)) { const b = findBuilding(c, id); return { sells: b.sells, buys: b.buys }; }
   const sells = {}, buys = {};
   for (const b of Object.values(c.towns[id].buildings)) {
     for (const g in b.sells) sells[g] = Math.min(sells[g] ?? Infinity, b.sells[g]);
@@ -113,6 +122,7 @@ function hash(str) { let h = 2166136261; for (const ch of str) { h ^= ch.charCod
 // Whether a route on this level can be planned right now.
 export function canPlan(c, s, level) {
   if (level === 'land') return landUnlocked(c, s) && !s.land.trip;
+  if (isHire(level)) return !!route(s, level) && !route(s, level).trip;
   return !s.land.trip && s.town != null && !route(s, 'town').trip;
 }
 
@@ -121,6 +131,7 @@ export function planAdd(c, s, level, id) {
   const r = route(s, level);
   const last = r.plan.length ? r.plan[r.plan.length - 1].b : r.at;
   if (last === id) return false;
+  if (isHire(level) && r.plan.length >= management(c, s).stops) return false;
   const orders = {};
   if (c.stopMode !== 'manual') for (const g in market(c, level, id).buys) orders[g] = 'sell';
   r.plan.push({ b: id, orders });
@@ -147,7 +158,8 @@ export function toggleOrder(c, s, level, i, g) {
 export function ordersUnlocked(c, s) {
   return c.stopMode !== 'manual' || c.upgrades.some(u => u.orders && s.upgrades[u.id]);
 }
-export function autoTrades(c, s, st) {
+export function autoTrades(c, s, st, level) {
+  if (isHire(level)) return true;
   return c.stopMode !== 'manual' || (ordersUnlocked(c, s) && Object.keys(st.orders).length > 0);
 }
 
@@ -168,7 +180,7 @@ export function startTrip(c, s, level) {
     const loc = s.town && s.locals[s.town];
     if (loc?.trip) endTrip(c, s, 'town', loc.trip.atStop ? loc.plan[loc.trip.idx].b : loc.at);
     if (s.town) r.at = s.town;
-  } else if (s.land.trip) return false;
+  } else if (level === 'town' && s.land.trip) return false;
   r.trip = { idx: 0, from: r.at, leg: 0, atStop: false, stay: 0, manual: false, go: false, startCoins: s.coins };
   r.at = null;
   if (level === 'land') s.town = null;
@@ -201,6 +213,7 @@ export function tick(c, s, dt) {
   const ev = [];
   const L = activeLevel(s);
   if (L) tickRoute(c, s, L, dt, ev);
+  for (const h of s.hires) if (h.route.trip) tickRoute(c, s, 'hire:' + h.id, dt, ev);
   return ev;
 }
 
@@ -235,7 +248,13 @@ function tickRoute(c, s, level, dt, ev) {
 }
 
 function arrive(c, s, level, ev) {
-  const r = route(s, level), st = r.plan[r.trip.idx], auto = autoTrades(c, s, st);
+  const r = route(s, level), st = r.plan[r.trip.idx], auto = autoTrades(c, s, st, level);
+  if (isHire(level)) {
+    s.visited[st.b] = true;
+    ev.push({ type: 'arrive', level, b: st.b, auto: true });
+    Object.assign(r.trip, { atStop: true, stay: c.dayLength, manual: false, go: false });
+    return;
+  }
   if (level === 'land') {
     s.town = st.b;
     ensureLocal(c, s, st.b);
@@ -248,10 +267,11 @@ function arrive(c, s, level, ev) {
 }
 
 function runOrders(c, s, level, st, ev) {
+  const inv = invOf(s, level), cap = capFor(c, s, level);
   for (const g in st.orders) if (st.orders[g] === 'sell') {
-    const p = sellPrice(c, level, st.b, g), n = s.inv[g] || 0;
+    const p = sellPrice(c, level, st.b, g), n = inv[g] || 0;
     if (!p || !n) continue;
-    delete s.inv[g]; s.coins += p * n; s.stats.earned += p * n;
+    delete inv[g]; s.coins += p * n; s.stats.earned += p * n;
     ev.push({ type: 'sell', level, b: st.b, good: g, n, coins: p * n });
   }
   const buys = Object.keys(st.orders).filter(g => st.orders[g] === 'buy');
@@ -260,10 +280,10 @@ function runOrders(c, s, level, st, ev) {
   while (buys.length && progress) {
     progress = false;
     for (const g of buys) {
-      if (carried(s) >= capacity(c, s)) break;
+      if (Object.values(inv).reduce((a, b) => a + b, 0) >= cap) break;
       const p = buyPrice(c, level, st.b, g);
       if (p == null || s.coins < p) continue;
-      s.coins -= p; s.inv[g] = (s.inv[g] || 0) + 1;
+      s.coins -= p; inv[g] = (inv[g] || 0) + 1;
       (bought[g] ??= { n: 0, coins: 0 }); bought[g].n++; bought[g].coins += p;
       progress = true;
     }
@@ -279,7 +299,7 @@ function advance(c, s, level, ev) {
     const profit = s.coins - tr.startCoins;
     endTrip(c, s, level, r.plan[tr.idx - 1].b);
     ev.push({ type: 'done', level, profit });
-    if (profit > 0) unlockAch(s, 'firstProfit', ev);
+    if (profit > 0 && !isHire(level)) unlockAch(s, 'firstProfit', ev);
     if (c.routeMode === 'loop' && !stopping) startTrip(c, s, level);
   } else if (level === 'land') s.town = null; // back on the road
 }
@@ -287,7 +307,7 @@ function advance(c, s, level, ev) {
 function endTrip(c, s, level, at) {
   const r = route(s, level);
   r.trip = null; r.at = at;
-  s.stats.trips++;
+  if (!isHire(level)) s.stats.trips++;
   if (level === 'land') { s.town = at; ensureLocal(c, s, at); }
 }
 
@@ -374,15 +394,62 @@ export function applyOffline(c, s, seconds) {
   const secs = Math.min(seconds, (c.offlineCapHours || 8) * 3600);
   const before = s.coins;
   const L = activeLevel(s);
-  if (L && route(s, L).plan.some(st => autoTrades(c, s, st))) {
-    s._offline = true;
+  const levels = s.hires.filter(h => h.route.trip).map(h => 'hire:' + h.id);
+  if (L && route(s, L).plan.some(st => autoTrades(c, s, st, L))) {
+    levels.push(L);
     const tr = route(s, L).trip;
     if (tr.atStop && tr.manual) tr.go = true; // a visit the player took over ends with the day
+  }
+  if (levels.length) {
+    s._offline = true;
     try {
-      for (let t = 0; t < secs && activeLevel(s); t += 0.5) tickRoute(c, s, activeLevel(s), Math.min(0.5, secs - t), []);
+      for (let t = 0; t < secs; t += 0.5) {
+        const dt = Math.min(0.5, secs - t);
+        let any = false;
+        for (const lv of levels) if (route(s, lv)?.trip) { tickRoute(c, s, lv, dt, []); any = true; }
+        if (!any) break;
+      }
     } finally { delete s._offline; }
   }
   return s.coins - before;
+}
+
+// ---------- hiring ----------
+
+// Management skill: how many merchants you can employ and how many stops their routes may have.
+export function management(c, s) {
+  let m = { hires: 0, stops: 0, level: 0 };
+  for (const u of c.upgrades) if (u.management && s.upgrades[u.id] && u.management.level > m.level) m = u.management;
+  return m;
+}
+
+export function hireCost(c, s) {
+  return Math.round(c.hiring.baseCost * Math.pow(c.hiring.costGrowth, s.hires.length));
+}
+
+export function canHire(c, s) {
+  return s.hires.length < management(c, s).hires && s.coins >= hireCost(c, s);
+}
+
+// Hire a merchant who starts in the town you're in (or the last town you left).
+export function hire(c, s) {
+  if (!canHire(c, s)) return null;
+  s.coins -= hireCost(c, s);
+  const id = (s.hires.reduce((m, h) => Math.max(m, h.id), 0) || 0) + 1;
+  const name = c.hiring.names[(id - 1) % c.hiring.names.length];
+  const at = s.town ?? s.land.at;
+  s.hires.push({ id, name, route: newRoute(at, c.towns[at]), inv: {} });
+  const ev = [{ type: 'hired', id, name }];
+  unlockAch(s, 'firstHire', ev);
+  return ev;
+}
+
+export function hireStop(c, s, level) {
+  const r = route(s, level);
+  if (!r?.trip) return false;
+  if (r.trip.atStop) { endTrip(c, s, level, r.plan[r.trip.idx].b); return true; }
+  r.trip.stopRequested = true;
+  return true;
 }
 
 // ---------- upgrades ----------
