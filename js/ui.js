@@ -5,7 +5,7 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.8.1';
+export const BUILD = '0.9.0';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
@@ -226,6 +226,19 @@ function bindPanel() {
     else { sfx.deny(); pulse($('#go'), 'shake'); }
   });
   onPress($('#clear'), () => { G.planClear(c, s, planLevel()); sfx.tap(); });
+  $('#plan').addEventListener('change', e => {
+    const t = e.target.closest('[data-f]'); if (!t) return;
+    blkEdit(+t.dataset.blk, prog => { const [l, k] = blkAt(prog, t.dataset.path); l[k][t.dataset.f] = t.dataset.f === 'amount' && t.value !== 'all' ? +t.value : t.value; });
+    sfx.tap(); buzz(4);
+  });
+  $('#plan').addEventListener('click', e => {
+    const b = e.target.closest('[data-add],[data-mv],[data-del]'); if (!b) return;
+    const i = +b.dataset.blk, path = b.dataset.path;
+    if (b.dataset.add) blkEdit(i, prog => { const list = path === '' ? prog : blkAt(prog, path)[0][blkAt(prog, path)[1]].then; list.push(newBlock(b.dataset.add, i)); });
+    else if (b.dataset.mv) blkEdit(i, prog => { const [l, k] = blkAt(prog, path), j = k + +b.dataset.mv; if (j < 0 || j >= l.length) return; [l[k], l[j]] = [l[j], l[k]]; });
+    else blkEdit(i, prog => { const [l, k] = blkAt(prog, path); l.splice(k, 1); });
+    sfx.tap(); buzz(6); pulse(b, 'squish');
+  });
   $('#plan').addEventListener('pointerdown', e => {
     const chip = e.target.closest('[data-good]'), rm = e.target.closest('[data-rm]');
     if (chip) { e.preventDefault(); G.toggleOrder(c, s, planLevel(), +chip.dataset.i, chip.dataset.good); sfx.tap(); buzz(4); }
@@ -300,7 +313,8 @@ function render() {
   const L = planLevel(), r = G.route(s, L);
   const ps = JSON.stringify(s.stock, (k, v) => typeof v === 'number' ? Math.round(v / 3) : v);
   const key = JSON.stringify([ps, L, r?.plan, r?.trip?.idx ?? -1, !!r?.trip, G.ordersUnlocked(c, s), G.canPlan(c, s, L), G.activeLevel(s)]);
-  if (key !== planKey) { planKey = key; renderPlan(); }
+  const busy = document.activeElement?.closest?.('#plan') && /SELECT|INPUT/.test(document.activeElement.tagName);
+  if (key !== planKey && !busy) { planKey = key; renderPlan(); }
 
   const t = G.tradingAt(s), tr = G.activeLevel(s) && G.route(s, G.activeLevel(s)).trip;
   const tk = JSON.stringify([ps, t, tr?.atStop, tr?.manual, tr?.go, G.isWaiting(s), s.inv, s.coins, cap]);
@@ -343,7 +357,7 @@ function renderPlan() {
   const el = $('#plan'), L = planLevel(), r = G.route(s, L);
   if (!r) { el.innerHTML = ''; return; }
   if (!r.plan.length) {
-    el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders, so give each stop some.' : L === 'land'
+    el.innerHTML = `<p class="hint">${G.isHire(L) ? 'Tap towns on the land map to add them to this merchant\'s route. Hired merchants only trade by standing orders or instructions, so give each stop some.' : L === 'land'
       ? 'Tap a town to see what it buys and sells, then add it to your route. You can also drag your finger through towns. Tap the town you are in to go back into it.'
       : 'Tap buildings on the map in the order you want to visit them, or drag your finger through them.'}
       ${G.ordersUnlocked(c, s) ? ' Pick what to buy or sell at each stop; stops with no orders wait for you to trade by hand.' : ' The merchant stays a day at each stop so you can trade.'}</p>`;
@@ -356,10 +370,62 @@ function renderPlan() {
     const chips = [];
     for (const g in m.sells) chips.push(chip(i, g, 'buy', m.sells[g], st.orders[g] === 'buy', locked));
     for (const g in m.buys) chips.push(chip(i, g, 'sell', m.buys[g], st.orders[g] === 'sell', locked));
+    const prog = G.isHire(L) && G.programUnlocked(c, s), useBlocks = prog && st.program?.length;
     return `<div class="stop ${state}">
       <div class="stop-head"><b class="num">${i + 1}</b><span>${nodeName(L, st.b)}</span>${locked ? '' : `<button class="rm" data-rm="${i}" aria-label="Remove stop">✕</button>`}</div>
-      ${G.ordersUnlocked(c, s) ? `<div class="chips">${chips.join('')}</div>${Object.keys(st.orders).length ? '' : '<div class="nochips">No orders: the merchant waits here for you.</div>'}` : ''}</div>`;
+      ${G.ordersUnlocked(c, s) && !useBlocks ? `<div class="chips">${chips.join('')}</div>${Object.keys(st.orders).length || G.isHire(L) ? '' : '<div class="nochips">No orders: the merchant waits here for you.</div>'}` : ''}
+      ${prog ? renderProgram(i, st, m, locked) : ''}</div>`;
   }).join('');
+}
+
+// ---- instruction blocks (hired merchants) ----
+const BLOCK_NAMES = { sell: 'Sell', buy: 'Buy', spend: 'Spend earnings', if: 'If price…', wait: 'Wait' };
+function renderProgram(i, st, m, locked) {
+  const prog = st.program || [], dis = locked ? 'disabled' : '';
+  const goodSel = (path, f, val, list) => `<select data-blk="${i}" data-path="${path}" data-f="${f}" ${dis}>${list.map(g => `<option value="${g}" ${g === val ? 'selected' : ''}>${c.goods[g].icon} ${c.goods[g].name}</option>`).join('')}</select>`;
+  const sel = (path, f, val, opts) => `<select data-blk="${i}" data-path="${path}" data-f="${f}" ${dis}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+  const amounts = [['all', 'all'], [1, '1'], [5, '5'], [10, '10'], [20, '20'], [40, '40']];
+  const sells = Object.keys(m.sells), buys = Object.keys(m.buys), all = [...new Set([...sells, ...buys])];
+  const tools = (path, n, len) => locked ? '' : `<span class="btools">${n > 0 ? `<button data-mv="-1" data-blk="${i}" data-path="${path}">↑</button>` : ''}${n < len - 1 ? `<button data-mv="1" data-blk="${i}" data-path="${path}">↓</button>` : ''}<button data-del data-blk="${i}" data-path="${path}">✕</button></span>`;
+  const palette = (parent, nested) => locked ? '' : `<div class="palette">${['sell', 'buy', 'spend', 'if', 'wait'].filter(op => G.blockAllowed(c, s, op) && !(nested && (op === 'wait' || op === 'if'))).map(op => `<button class="padd p-${op}" data-add="${op}" data-blk="${i}" data-path="${parent}">+ ${BLOCK_NAMES[op]}</button>`).join('')}</div>`;
+  const one = (b, path, n, len) => {
+    let body = '';
+    if (b.op === 'sell') body = `Sell ${sel(path, 'amount', b.amount, amounts)} ${goodSel(path, 'good', b.good, buys.length ? buys : all)}`;
+    else if (b.op === 'buy') body = `Buy ${sel(path, 'amount', b.amount, amounts)} ${goodSel(path, 'good', b.good, sells.length ? sells : all)}`;
+    else if (b.op === 'spend') body = `Spend what I earned here on ${goodSel(path, 'good', b.good, sells.length ? sells : all)}`;
+    else if (b.op === 'wait') body = `Wait ${sel(path, 'days', b.days, [1, 2, 3, 4, 5].map(d => [d, d + (d > 1 ? ' days' : ' day')]))}, then go on below`;
+    else if (b.op === 'if') {
+      const cmps = [['<', 'is below'], ['>', 'is above']].concat(G.blockAllowed(c, s, 'if', 'dropped') ? [['dropped', 'dropped during the wait'], ['rose', 'rose during the wait']] : []);
+      const val = b.cmp === '<' || b.cmp === '>' ? `<input type="number" inputmode="numeric" min="0" value="${b.value}" data-blk="${i}" data-path="${path}" data-f="value" ${dis}>` : '';
+      const kids = b.then.map((x, k) => one(x, path + '.' + k, k, b.then.length)).join('');
+      body = `If ${goodSel(path, 'good', b.good, all)} ${sel(path, 'side', b.side, [['buy', 'cost to buy'], ['sell', 'sale price']])} ${sel(path, 'cmp', b.cmp, cmps)} ${val}
+        <div class="bkids">${kids || '<div class="bempty">Add what to do then:</div>'}${palette(path, true)}</div>`;
+    }
+    return `<div class="blk b-${b.op}"><div class="bline">${body}</div>${tools(path, n, len)}</div>`;
+  };
+  return `<div class="prog">${prog.length ? '<div class="phead">Instructions (replace orders here)</div>' : '<div class="phead">Or give instructions instead of orders:</div>'}
+    ${prog.map((b, k) => one(b, String(k), k, prog.length)).join('')}${palette('', false)}</div>`;
+}
+function blkEdit(i, fn) {
+  const r = G.route(s, planLevel()), st = r?.plan[i]; if (!st) return;
+  const prog = structuredClone(st.program || []);
+  fn(prog);
+  if (G.setProgram(c, s, planLevel(), i, prog)) { planKey = ''; save(); }
+}
+function blkAt(prog, path) { // returns [list, index]
+  const parts = path.split('.').map(Number);
+  let list = prog;
+  for (let k = 0; k < parts.length - 1; k++) list = list[parts[k]].then;
+  return [list, parts[parts.length - 1]];
+}
+function newBlock(op, i) {
+  const m = G.market(c, planLevel(), G.route(s, planLevel()).plan[i].b, s);
+  const sells = Object.keys(m.sells), buys = Object.keys(m.buys), g0 = sells[0] || buys[0];
+  if (op === 'sell') return { op, good: buys[0] || g0, amount: 'all' };
+  if (op === 'buy') return { op, good: g0, amount: 'all' };
+  if (op === 'spend') return { op, good: g0 };
+  if (op === 'wait') return { op, days: 1 };
+  return { op: 'if', good: g0, side: sells.includes(g0) ? 'buy' : 'sell', cmp: '<', value: m.sells[g0] ?? m.buys[g0] ?? 0, then: [] };
 }
 
 function chip(i, g, kind, price, on, locked) {

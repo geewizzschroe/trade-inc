@@ -163,3 +163,17 @@ textarea{width:100%;background:#0f2131;color:var(--ink);border:1px solid #3a5873
 .hire-sub{color:var(--mute);font-size:13px;margin:4px 0}
 .btn.stop-btn{background:#5a3a3a;color:#ffd9d4;box-shadow:0 4px 0 #2e1c1c}
 .ig i{font-style:normal;font-size:10px;margin-left:2px}.ig i{color:#f5c542}
+
+.prog{margin-top:8px;border-top:1px dashed rgba(255,255,255,.12);padding-top:8px}
+.phead{color:var(--mute);font-size:12px;margin-bottom:6px}
+.blk{display:flex;gap:6px;align-items:flex-start;border-radius:10px;padding:8px;margin-bottom:6px;color:#fff;font-size:14px;line-height:2}
+.blk.b-sell{background:#7a5a1e}.blk.b-buy{background:#2f6b45}.blk.b-spend{background:#2d5e78}.blk.b-wait{background:#5b4a85}.blk.b-if{background:#8a3f5a}
+.bline{flex:1;min-width:0}
+.blk select,.blk input{background:rgba(0,0,0,.28);color:#fff;border:0;border-radius:8px;padding:4px 6px;font:inherit;font-weight:700;max-width:100%}
+.blk input{width:64px}
+.btools{display:flex;gap:4px}.btools button{background:rgba(0,0,0,.25);color:#fff;border:0;border-radius:8px;width:30px;height:30px;font-size:14px}
+.bkids{margin-top:6px;padding-left:10px;border-left:4px solid rgba(255,255,255,.35)}
+.bempty{font-size:12px;opacity:.8}
+.palette{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.padd{border:0;border-radius:999px;padding:6px 10px;color:#fff;font-weight:700;font-size:12px;opacity:.9}
+.padd.p-sell{background:#7a5a1e}.padd.p-buy{background:#2f6b45}.padd.p-spend{background:#2d5e78}.padd.p-wait{background:#5b4a85}.padd.p-if{background:#8a3f5a}

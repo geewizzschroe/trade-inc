@@ -104,3 +104,26 @@ console.log('game tests passed');
   assert.equal(G.buyPrice(c, 'town', 'farm', 'apples', s), G.buyPrice(c, 'town', 'farm', 'apples'), 'town level stays fixed');
   console.log('price tests passed');
 }
+{
+  // instruction blocks
+  const s = G.createState(c); s.coins = 90000;
+  for (const u of ['horse', 'orders', 'mgmt1']) G.buyUpgrade(c, s, u);
+  G.hire(c, s); const L = 'hire:1';
+  G.planAdd(c, s, L, 'vinehollow'); G.planAdd(c, s, L, 'kingsport');
+  assert.ok(!G.programUnlocked(c, s));
+  G.buyUpgrade(c, s, 'mgmt2');
+  assert.ok(G.programUnlocked(c, s) && !G.blockAllowed(c, s, 'wait'));
+  G.setProgram(c, s, L, 0, [{ op: 'wait', days: 1 }, { op: 'if', good: 'wine', side: 'buy', cmp: '<', value: 999, then: [{ op: 'buy', good: 'wine', amount: 5 }] }]);
+  assert.equal(s.hires[0].route.plan[0].program.length, 1, 'wait dropped below level 3');
+  G.setProgram(c, s, L, 1, [{ op: 'sell', good: 'wine', amount: 'all' }, { op: 'spend', good: 'salt' }]);
+  const kp = G.market(c, 'land', 'kingsport').sells;
+  G.startTrip(c, s, L);
+  for (let t = 0; t < 40; t += 0.05) G.tick(c, s, 0.05);
+  const inv = s.hires[0].inv;
+  assert.ok(!inv.wine, 'sold wine'); assert.ok(inv.salt > 0 && kp.salt, JSON.stringify(inv));
+  G.hireStop(c, s, L); for (let t = 0; t < 60 && s.hires[0].route.trip; t += 0.05) G.tick(c, s, 0.05);
+  G.buyUpgrade(c, s, 'mgmt3');
+  assert.ok(G.setProgram(c, s, L, 0, [{ op: 'wait', days: 2 }, { op: 'if', good: 'wine', side: 'buy', cmp: 'dropped', then: [{ op: 'buy', good: 'wine', amount: 'all' }] }]));
+  assert.ok(G.loopSeconds(c, s, L) > 2 * c.dayLength * 2);
+  console.log('block tests passed');
+}

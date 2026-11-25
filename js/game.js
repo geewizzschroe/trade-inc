@@ -259,7 +259,11 @@ function tickRoute(c, s, level, dt, ev) {
         if (tr.stay > 0) break;
       }
       if (tr.manual && !tr.go) break; // waiting for the player
-      if (!tr.manual) runOrders(c, s, level, r.plan[tr.idx], ev);
+      if (!tr.manual) {
+        const st = r.plan[tr.idx];
+        if (st.program?.length && isHire(level)) { if (runProgram(c, s, level, st, ev)) continue; }
+        else runOrders(c, s, level, st, ev);
+      }
       advance(c, s, level, ev);
       continue;
     }
@@ -325,6 +329,7 @@ function runOrders(c, s, level, st, ev) {
 function advance(c, s, level, ev) {
   const r = route(s, level), tr = r.trip;
   tr.idx++; tr.leg = 0; tr.atStop = false; tr.stay = 0; tr.manual = false; tr.go = false;
+  tr.pc = 0; tr.earned = 0; tr.spent = 0; tr.snap = null;
   if (tr.idx >= r.plan.length || tr.stopRequested) {
     const stopping = tr.stopRequested;
     const profit = s.coins - tr.startCoins;
@@ -352,7 +357,99 @@ export function loopSeconds(c, s, level) {
     const a = N[r.plan[(i - 1 + r.plan.length) % r.plan.length].b], b = N[r.plan[i].b];
     d += Math.hypot(b.x - a.x, b.y - a.y);
   }
-  return d / speedFor(c, s, level) + r.plan.length * c.dayLength;
+  const waits = r.plan.reduce((a, st) => a + (st.program || []).filter(b => b.op === 'wait').reduce((x, b) => x + (b.days || 1), 0), 0);
+  return d / speedFor(c, s, level) + (r.plan.length + waits) * c.dayLength;
+}
+
+// ---------- instruction blocks ----------
+// A hired merchant's stop can carry a program instead of standing orders: a
+// list of blocks run at the end of the day there. Blocks:
+//   { op:'sell', good, amount:'all'|n }    { op:'buy', good, amount:'all'|n }
+//   { op:'spend', good }                   buy good with what this visit's sales earned
+//   { op:'wait', days }                    stay longer; the rest runs after (top level only)
+//   { op:'if', good, side:'buy'|'sell', cmp:'<'|'>'|'dropped'|'rose', value, then:[...] }
+// 'dropped'/'rose' compare with the price when the last Wait began.
+export function programUnlocked(c, s) { return management(c, s).level >= c.blocks.sell; }
+export function blockAllowed(c, s, op, cmp) {
+  const lv = management(c, s).level;
+  if (lv < (c.blocks[op] ?? 99)) return false;
+  return !(op === 'if' && (cmp === 'dropped' || cmp === 'rose') && lv < c.blocks.cmpTrend);
+}
+// Replace stop i's program with a cleaned copy. Returns false if not allowed.
+export function setProgram(c, s, level, i, program) {
+  const r = route(s, level), st = r?.plan[i];
+  if (!st || !isHire(level) || !canPlan(c, s, level)) return false;
+  let count = 0;
+  const clean = (list, depth) => (Array.isArray(list) ? list : []).flatMap(b => {
+    if (!b || !c.goods[b.good] && b.op !== 'wait') return [];
+    if (!blockAllowed(c, s, b.op, b.cmp) || ++count > c.blocks.maxBlocks) return [];
+    const amt = a => a === 'all' ? 'all' : Math.max(1, Math.min(999, Math.floor(+a) || 1));
+    switch (b.op) {
+      case 'sell': case 'buy': return [{ op: b.op, good: b.good, amount: amt(b.amount) }];
+      case 'spend': return [{ op: 'spend', good: b.good }];
+      case 'wait': return depth ? [] : [{ op: 'wait', days: Math.max(1, Math.min(9, Math.floor(+b.days) || 1)) }];
+      case 'if': {
+        if (depth + 1 >= c.blocks.maxDepth + 1) return [];
+        const cmp = ['<', '>', 'dropped', 'rose'].includes(b.cmp) ? b.cmp : '<';
+        return [{ op: 'if', good: b.good, side: b.side === 'sell' ? 'sell' : 'buy', cmp, value: Math.max(0, Math.floor(+b.value) || 0), then: clean(b.then, depth + 1) }];
+      }
+    }
+    return [];
+  });
+  st.program = clean(program, 0);
+  return true;
+}
+
+function runProgram(c, s, level, st, ev) {
+  const tr = route(s, level).trip, list = st.program;
+  for (let i = tr.pc || 0; i < list.length; i++) {
+    const b = list[i];
+    if (b.op === 'wait') {
+      tr.pc = i + 1; tr.stay = c.dayLength * (b.days || 1);
+      tr.snap = market(c, level, st.b, s);
+      ev.push({ type: 'wait', level, b: st.b, days: b.days || 1 });
+      return true;
+    }
+    runBlock(c, s, level, st.b, b, tr, ev);
+  }
+  return false;
+}
+function runBlock(c, s, level, town, b, tr, ev) {
+  const inv = invOf(s, level);
+  if (b.op === 'sell') {
+    const n = Math.min(inv[b.good] || 0, b.amount === 'all' ? Infinity : b.amount);
+    if (!n || !sellPrice(c, level, town, b.good)) return;
+    const got = sellUnits(c, s, level, town, b.good, n);
+    inv[b.good] -= n; if (!inv[b.good]) delete inv[b.good];
+    s.coins += got; s.stats.earned += got; tr.earned = (tr.earned || 0) + got;
+    ev.push({ type: 'sell', level, b: town, good: b.good, n, coins: got });
+  } else if (b.op === 'buy') {
+    buyUnits(c, s, level, town, b.good, b.amount === 'all' ? Infinity : b.amount, Infinity, ev);
+  } else if (b.op === 'spend') {
+    tr.spent = (tr.spent || 0) + buyUnits(c, s, level, town, b.good, Infinity, (tr.earned || 0) - (tr.spent || 0), ev);
+  } else if (b.op === 'if') {
+    if (testBlock(c, s, level, town, b, tr)) for (const x of b.then) runBlock(c, s, level, town, x, tr, ev);
+  }
+}
+export function testBlock(c, s, level, town, b, tr) {
+  const now = market(c, level, town, s)[b.side === 'buy' ? 'sells' : 'buys'][b.good];
+  if (now == null) return false;
+  if (b.cmp === '<') return now < b.value;
+  if (b.cmp === '>') return now > b.value;
+  const was = tr?.snap?.[b.side === 'buy' ? 'sells' : 'buys'][b.good];
+  if (was == null) return false;
+  return b.cmp === 'dropped' ? now < was : now > was;
+}
+function buyUnits(c, s, level, town, g, max, budget, ev) {
+  const inv = invOf(s, level), cap = capFor(c, s, level);
+  let n = 0, paid = 0;
+  while (n < max && Object.values(inv).reduce((a, x) => a + x, 0) < cap) {
+    const p = buyPrice(c, level, town, g, s);
+    if (p == null || p > s.coins || paid + p > budget) break;
+    s.coins -= p; paid += p; n++; inv[g] = (inv[g] || 0) + 1; shift(c, s, level, town, g, -1);
+  }
+  if (n) ev.push({ type: 'buy', level, b: town, good: g, n, coins: paid });
+  return paid;
 }
 
 // ---------- trading by hand ----------

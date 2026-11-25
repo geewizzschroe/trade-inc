@@ -14,7 +14,12 @@
   "mode": "fixed",
   "estimate": "untilVisited",
   "estimateSpread": 0.25,
-  "react": { "perUnit": 0.01, "recoverSeconds": 30, "minMult": 0.25, "maxMult": 4 }
+  "react": {
+   "perUnit": 0.01,
+   "recoverSeconds": 30,
+   "minMult": 0.25,
+   "maxMult": 4
+  }
  },
  "routeMode": "loop",
  "stopMode": "manual",
@@ -454,7 +459,7 @@
    "name": "Management II",
    "icon": "📗",
    "cost": 6000,
-   "desc": "Up to 3 merchants, routes of up to 3 towns.",
+   "desc": "Up to 3 merchants, routes of up to 3 towns. Unlocks instruction blocks: buy and sell amounts, If price, Spend what you earned.",
    "needs": "mgmt1",
    "management": {
     "level": 2,
@@ -467,7 +472,7 @@
    "name": "Management III",
    "icon": "📘",
    "cost": 25000,
-   "desc": "Up to 6 merchants, routes of up to 5 towns.",
+   "desc": "Up to 6 merchants, routes of up to 5 towns. Unlocks Wait a day and If the price dropped.",
    "needs": "mgmt2",
    "management": {
     "level": 3,
@@ -512,5 +517,15 @@
    "Kett",
    "Lume"
   ]
+ },
+ "blocks": {
+  "sell": 2,
+  "buy": 2,
+  "spend": 2,
+  "if": 2,
+  "wait": 3,
+  "cmpTrend": 3,
+  "maxDepth": 2,
+  "maxBlocks": 12
  }
 }
