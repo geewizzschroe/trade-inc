@@ -136,7 +136,11 @@ export function tick(c, s, dt) {
 function arrive(c, s, ev) {
   const st = s.plan[s.trip.idx];
   ev.push({ type: 'arrive', b: st.b });
-  if (!autoTrades(c, s, st)) { s.trip.waiting = true; return; }
+  if (!autoTrades(c, s, st)) {
+    // While the app is closed, stops without orders are walked past.
+    if (s._offline) { s.trip.pause = 0.001; return; }
+    s.trip.waiting = true; return;
+  }
   // Sell first, so the coins can pay for buying.
   for (const g in st.orders) if (st.orders[g] === 'sell') {
     let n = 0, got = 0;
@@ -278,11 +282,18 @@ export function applyOffline(c, s, seconds) {
   const before = s.coins;
   const step = 0.5;
   let t = 0;
-  while (t < secs) {
-    const dt = Math.min(step, secs - t);
-    if (!s.trip || s.trip.waiting) { recoverPrices(c, s, secs - t); break; }
-    tick(c, s, dt); t += dt;
+  // Only a route with at least one stop that trades by itself does anything while closed.
+  if (s.trip && s.plan.some(st => autoTrades(c, s, st))) {
+    s._offline = true;
+    if (s.trip.waiting) { s.trip.waiting = false; s.trip.pause = 0.001; }
+    try {
+      while (t < secs && s.trip) {
+        const dt = Math.min(step, secs - t);
+        tick(c, s, dt); t += dt;
+      }
+    } finally { delete s._offline; }
   }
+  recoverPrices(c, s, Math.max(0, secs - t));
   return s.coins - before;
 }
 

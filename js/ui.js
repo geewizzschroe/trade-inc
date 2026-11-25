@@ -4,7 +4,7 @@ import * as S from './storage.js';
 import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 
-export const BUILD = '0.5.0';
+export const BUILD = '0.5.1';
 
 const $ = sel => document.querySelector(sel);
 let c, s, map;

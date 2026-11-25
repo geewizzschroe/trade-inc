@@ -77,4 +77,18 @@ T.planAdd(cm, s7, 'farm'); T.toggleOrder(cm, s7, 0, 'apples'); T.planAdd(cm, s7,
 T.startTrip(s7); const c0 = s7.coins;
 T.applyOffline(cm, s7, 300);
 assert.ok(s7.coins > c0, 'orders loop earns offline'); assert.ok(!s7.trip.waiting);
+// offline: a stop with no orders is walked past instead of waiting
+const s8 = T.createState(cm); s8.coins = 200; T.buyUpgrade(cm, s8, 'orders');
+T.planAdd(cm, s8, 'farm'); T.toggleOrder(cm, s8, 0, 'apples');
+T.planAdd(cm, s8, 'bakery');                       // no orders
+T.planAdd(cm, s8, 'market'); T.toggleOrder(cm, s8, 2, 'apples');
+T.startTrip(s8);
+for (let i = 0; i < 400 && !s8.trip.waiting; i++) T.tick(cm, s8, 0.05);
+assert.ok(s8.trip.waiting, 'waits at bakery while open');
+const c8 = s8.coins; T.applyOffline(cm, s8, 600);
+assert.ok(s8.coins > c8, 'earns offline past the no-order stop'); assert.ok(s8.stats.trips >= 3);
+assert.equal(s8._offline, undefined);
+// a route with no orders at all earns nothing offline and stays put
+const s9 = T.createState(cm); T.planAdd(cm, s9, 'farm'); T.startTrip(s9);
+assert.equal(T.applyOffline(cm, s9, 600), 0);
 console.log('town tests passed');
