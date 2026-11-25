@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import * as G from '../js/game.js';
 const c = JSON.parse(fs.readFileSync(new URL('../data/world.json', import.meta.url)));
+const drift0 = c.prices.drift; c.prices.drift = { ...drift0, amp: 0 }; // exact prices for these tests
 const runUntil = (s, cond, max = 120) => { const ev = []; for (let t = 0; t < max && !cond(); t += 0.05) ev.push(...G.tick(c, s, 0.05)); return ev; };
 
 // --- town level, by hand ---
@@ -20,7 +21,7 @@ runUntil(s, () => G.tradingAt(s)?.id === 'market');
 assert.equal(G.tradeSell(c, s, 'apples', 99).coins, 12);
 G.requestStop(c, s);
 assert.equal(G.activeLevel(s), null); assert.equal(G.route(s, 'town').at, 'market');
-assert.ok(G.loopSeconds(c, s, 'town') > 12);
+assert.ok(G.loopSeconds(c, s, 'town') > 2);
 
 // --- standing orders run at day end; offline skips no-order stops ---
 s = G.createState(c); s.coins = 300; G.buyUpgrade(c, s, 'orders');
@@ -92,12 +93,12 @@ console.log('game tests passed');
 }
 {
   // land prices react to trading and recover
-  const s = G.createState(c); s.coins = 5000; G.buyUpgrade(c, s, 'horse'); G.buyUpgrade(c, s, 'wagon');
+  const s = G.createState(c); s.coins = 5000; s.upgrades.horse = s.upgrades.wagon = true;
   s.view = 'land';
   const m = G.market(c, 'land', 'millbrook').sells, g = Object.keys(m).sort((x, y) => m[y] - m[x])[0]; // dearest good, so +1% shows
   const q0 = G.buyPrice(c, 'land', 'millbrook', g, s);
   const ev = G.tradeBuy(c, s, g, 30);
-  assert.ok(ev.n === 30 && ev.coins > q0 * 30, 'buying 30 costs more than 30x base');
+  assert.ok(ev.n >= 15 && ev.coins > q0 * ev.n, 'buying many costs more than n x base');
   assert.ok(G.buyPrice(c, 'land', 'millbrook', g, s) > q0, 'price rose');
   for (let t = 0; t < 600; t += 0.5) G.tick(c, s, 0.5);
   assert.equal(G.buyPrice(c, 'land', 'millbrook', g, s), q0, 'price recovered');
@@ -138,4 +139,32 @@ console.log('game tests passed');
   assert.deepEqual(G.tradingAt(s), { level: 'town', id: 'bakery' });
   assert.ok(!G.goTo(c, s, 'bakery'), 'already there');
   console.log('goto tests passed');
+}
+{
+  // bulky goods, stays, quick dealings, drift bounds, hires share your upgrades
+  let s = G.createState(c); s.coins = 100;
+  G.goTo(c, s, 'dairy'); for (let t = 0; t < 30 && G.activeLevel(s); t += 0.05) G.tick(c, s, 0.05);
+  assert.equal(G.maxBuy(c, s, 'cheese'), 1, '3 slots hold one 2-slot cheese');
+  G.tradeBuy(c, s, 'cheese', 9); assert.equal(G.carried(s, c), 2);
+  // hand stop pauses ~1s; orders stop a day, shortened by Quick dealings
+  s = G.createState(c); s.coins = 9999; s.upgrades.orders = true;
+  G.planAdd(c, s, 'town', 'farm'); G.planAdd(c, s, 'town', 'market'); G.toggleOrder(c, s, 'town', 1, 'apples');
+  G.startTrip(c, s, 'town');
+  for (let t = 0; t < 30 && !G.tradingAt(s); t += 0.05) G.tick(c, s, 0.05);
+  assert.equal(G.route(s, 'town').trip.stayTotal, c.handStay);
+  const L0 = G.loopSeconds(c, s, 'town'); s.upgrades.quick1 = true;
+  assert.ok(G.loopSeconds(c, s, 'town') < L0);
+  s.upgrades.quick3 = true; assert.ok(G.autoWait(c, s) < 0.1);
+  // drift stays within bounds and moves prices
+  c.prices.drift = drift0; s = G.createState(c);
+  for (let t = 0; t < 3600; t += 1) G.tick(c, s, 1);
+  const all = Object.values(s.drift).flatMap(o => Object.values(o));
+  assert.ok(all.length > 20 && all.every(v => Math.abs(v) <= drift0.amp + 1e-9) && all.some(v => v !== 0));
+  c.prices.drift = { ...drift0, amp: 0 };
+  // hires use your capacity
+  s = G.createState(c); s.coins = 1e6; Object.assign(s.upgrades, { horse: true, orders: true, mgmt1: true, wagon: true });
+  G.hire(c, s); G.planAdd(c, s, 'hire:1', 'vinehollow'); G.toggleOrder(c, s, 'hire:1', 0, 'wine'); G.planAdd(c, s, 'hire:1', 'kingsport');
+  G.startTrip(c, s, 'hire:1'); for (let t = 0; t < 60 && !s.hires[0].inv.wine; t += 0.05) G.tick(c, s, 0.05);
+  assert.equal(s.hires[0].inv.wine, 40);
+  console.log('rework tests passed');
 }

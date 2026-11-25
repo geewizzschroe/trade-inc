@@ -5,7 +5,7 @@ import { sfx, buzz, floatText, burst, pulse, fxSettings } from './fx.js';
 import { TownMap } from './townmap.js';
 import { LandMap } from './landmap.js';
 
-export const BUILD = '0.9.2';
+export const BUILD = '0.10.0';
 
 const $ = sel => document.querySelector(sel);
 let c, s, maps, selected = null, editing = null;   // editing: 'hire:<id>' while planning a merchant's route
@@ -111,7 +111,7 @@ function bindMap() {
     const L = G.activeLevel(s);
     if (L === view() && !editing) {
       const tr = G.route(s, L).trip;
-      if (tr.atStop) { pulse($('#trade'), 'shake'); sfx.deny(); return; }
+      if (tr.atStop) return; // taps that land after arrival are just ignored
       if (G.hurry(c, s)) { sfx.tap(); buzz(6); map().puff(); floatText(e.clientX, e.clientY - 10, '»', 'tap'); }
       return;
     }
@@ -262,6 +262,7 @@ function bindPanel() {
     const ev = act.startsWith('buy') ? G.tradeBuy(c, s, g, n) : G.tradeSell(c, s, g, n);
     if (!ev) { sfx.deny(); pulse(btn, 'shake'); return; }
     const r = btn.getBoundingClientRect();
+    if (ev.ach) handle([{ type: 'achievement', id: ev.ach }]);
     if (ev.type === 'sell') { floatText(r.left + r.width / 2, r.top, `+${G.formatNumber(ev.coins)} 🪙`, 'coin'); burst(r.left + r.width / 2, r.top, Math.min(10, 2 + ev.n)); sfx.coin(true); pulse($('#coins'), 'bump'); }
     else { floatText(r.left + r.width / 2, r.top, `+${ev.n} ${c.goods[g].icon}`, 'hire'); sfx.hire(); pulse($('#bag'), 'bump'); }
     buzz(8); pulse(btn, 'squish');
@@ -313,10 +314,10 @@ function render() {
   $('#coins-n').textContent = G.formatNumber(s.coins);
   renderViewBtn();
   const cap = G.capacity(c, s), items = [];
-  for (const g in s.inv) for (let i = 0; i < s.inv[g]; i++) items.push(c.goods[g].icon);
+  for (const g in s.inv) for (let i = 0; i < s.inv[g]; i++) { items.push(c.goods[g].icon); for (let k = 1; k < G.sizeOf(c, g); k++) items.push('▫️'); }
   const bagHtml = cap <= 5
     ? Array.from({ length: cap }, (_, i) => `<span class="slot">${items[i] || ''}</span>`).join('')
-    : `<span class="bagtext">${Object.entries(s.inv).map(([g, n]) => c.goods[g].icon + n).join(' ') || 'Empty'} · ${G.carried(s)}/${cap}</span>`;
+    : `<span class="bagtext">${Object.entries(s.inv).map(([g, n]) => c.goods[g].icon + n).join(' ') || 'Empty'} · ${G.carried(s, c)}/${cap}</span>`;
   if ($('#bag').dataset.k !== bagHtml) { $('#bag').dataset.k = bagHtml; $('#bag').innerHTML = bagHtml; }
 
   const L = planLevel(), r = G.route(s, L);
@@ -443,6 +444,7 @@ function chip(i, g, kind, price, on, locked) {
     ${kind === 'buy' ? 'Buy' : 'Sell'} ${gd.icon} <b>${price}</b></button>`;
 }
 
+const sz = g => G.sizeOf(c, g) > 1 ? `<small class="sz">bulky · ${G.sizeOf(c, g)} slots</small>` : '';
 function renderTrade() {
   const el = $('#trade'), t = G.tradingAt(s);
   if (!t) { el.hidden = true; el.innerHTML = ''; return; }
@@ -450,13 +452,13 @@ function renderTrade() {
   const m = G.market(c, t.level, t.id, s), rows = [];
   for (const g in m.sells) {
     const can = G.maxBuy(c, s, g) > 0;
-    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}</span><span class="tp">🪙 ${m.sells[g]}</span>
+    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}${sz(g)}</span><span class="tp">🪙 ${m.sells[g]}</span>
       <button class="tb buy1 ${can ? 'ok' : ''}" data-act="buy" data-good="${g}">Buy</button>
       <button class="tb buy1 ${can ? 'ok' : ''}" data-act="buyall" data-good="${g}">Max</button></div>`);
   }
   for (const g in m.buys) {
     const have = s.inv[g] || 0;
-    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}${have ? ` <i>×${have}</i>` : ''}</span><span class="tp">🪙 ${m.buys[g]}</span>
+    rows.push(`<div class="trow"><span class="tg">${c.goods[g].icon} ${c.goods[g].name}${have ? ` <i>×${have}</i>` : ''}${sz(g)}</span><span class="tp">🪙 ${m.buys[g]}</span>
       <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sell" data-good="${g}">Sell</button>
       <button class="tb sell1 ${have ? 'ok' : ''}" data-act="sellall" data-good="${g}">All</button></div>`);
   }
@@ -470,7 +472,7 @@ function renderTrade() {
   }
   const ordText = auto ? `<p class="onote ${tr.manual ? 'off' : ''}">${tr.manual ? 'You took over this visit, so standing orders skip it.' : 'Standing orders here: ' + Object.entries(ord).map(([g, o]) => `${o === 'buy' ? 'buy' : 'sell'} ${c.goods[g].icon}`).join(', ') + '.'}</p>` : '';
   el.innerHTML = `<div class="sec-head"><b>${visiting ? 'Visiting' : 'Trading at'} ${nodeName(t.level, t.id)}${t.level === 'land' ? ' market' : ''}</b></div>
-    <div class="tcard">${visiting && G.ordersUnlocked(c, s) ? '<div class="day"><div class="day-bar"><i id="day-fill"></i></div><p id="stay-text"></p></div>' : ''}${ordText}
+    <div class="tcard">${visiting ? `<div class="day">${tr.manual ? '' : '<div class="day-bar"><i id="day-fill"></i></div>'}<p id="stay-text"></p></div>` : ''}${ordText}
     ${rows.join('') || '<p class="hint">Nothing to trade here.</p>'}
     ${visiting && tr.manual ? `<button class="btn go ${tr.go ? '' : 'afford'}" data-act="continue" id="walk-on">Walk on ▶</button>` : ''}</div>`;
   updateStay();
@@ -479,15 +481,14 @@ function renderTrade() {
 function updateStay() {
   const A = G.activeLevel(s), tr = A && G.route(s, A).trip, txt = $('#stay-text');
   if (!tr?.atStop || !txt) return;
-  const left = Math.max(0, tr.stay);
-  $('#day-fill').style.transform = `scaleX(${1 - left / c.dayLength})`;
+  const left = Math.max(0, tr.stay), fill = $('#day-fill');
+  if (fill) fill.style.transform = `scaleX(${1 - left / (tr.stayTotal || c.dayLength)})`;
   let t;
-  if (!tr.manual) t = `Standing orders run at the end of the day (${Math.ceil(left)}s). Trade by hand to take over this visit.`;
-  else if (tr.go) t = left > 0 ? `Leaving when the day ends (${Math.ceil(left)}s).` : 'Leaving…';
-  else if (left > 0) t = `The day ends in ${Math.ceil(left)}s. Tap Walk on whenever you're done.`;
-  else t = 'The day is over. Waiting for you to walk on.';
+  if (!tr.manual) t = `Standing orders run when the bar fills (${left.toFixed(1)}s). Trade by hand to take over this visit.`;
+  else if (tr.go) t = left > 0 ? 'Packing up…' : 'Leaving…';
+  else t = 'Trade, then tap Walk on.';
   if (txt.textContent !== t) txt.textContent = t;
-  const w = $('#walk-on'); if (w) { const l = tr.go ? "Walking on at day's end" : 'Walk on ▶'; if (w.textContent !== l) w.textContent = l; }
+  const w = $('#walk-on'); if (w) { const l = tr.go && left > 0 ? 'Packing up…' : 'Walk on ▶'; if (w.textContent !== l) w.textContent = l; }
 }
 
 function setEditing(lv) {
@@ -514,7 +515,7 @@ function renderHires() {
   }).join('');
   const full = s.hires.length >= m.hires, cost = G.hireCost(c, s);
   el.innerHTML = `<div class="sec-head"><b>Merchants ${s.hires.length}/${m.hires}</b></div>${cards}
-    ${full ? '<p class="hint">Raise your Management skill to hire more.</p>' : `<div class="up"><div class="up-icon">🧑</div><div class="up-text"><b>Hire a merchant</b><span>Starts in the town you're in, carries 15 goods, rides on standing orders.</span></div>
+    ${full ? '<p class="hint">Raise your Management skill to hire more.</p>' : `<div class="up"><div class="up-icon">🧑</div><div class="up-text"><b>Hire a merchant</b><span>Starts in the town you're in. Uses your carrying and riding upgrades, and trades on standing orders.</span></div>
       <button class="buy ${s.coins >= cost ? 'afford' : ''}" data-h="hire">HIRE · 🪙 ${G.formatNumber(cost)}</button></div>`}`;
 }
 
@@ -541,7 +542,12 @@ function renderInfo() {
 }
 
 function renderUpgrades() {
-  $('#upgrades').innerHTML = c.upgrades.filter(u => G.upgradeVisible(c, s, u)).map(u => {
+  // Hide ladder steps you've outgrown: an owned step another owned step builds on,
+  // and an unowned step that wouldn't raise what you already have.
+  const ownedNeeds = new Set(c.upgrades.filter(u => s.upgrades[u.id]).flatMap(u => [].concat(u.needs || [])));
+  const outgrown = u => s.upgrades[u.id] ? ownedNeeds.has(u.id) && !u.unlocksLand && !u.orders && !u.management
+    : (u.capacity && u.capacity <= G.capacity(c, s));
+  $('#upgrades').innerHTML = c.upgrades.filter(u => G.upgradeVisible(c, s, u) && !outgrown(u)).map(u => {
     const owned = s.upgrades[u.id];
     return `<div class="up ${owned ? 'owned' : ''}">
       <div class="up-icon">${u.icon}</div>

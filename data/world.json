@@ -9,16 +9,22 @@
  "dayLength": 6,
  "hurryDistance": 28,
  "landHurry": 7,
- "offlineCapHours": 8,
+ "offlineCapHours": 6,
  "prices": {
   "mode": "fixed",
   "estimate": "untilVisited",
   "estimateSpread": 0.25,
   "react": {
    "perUnit": 0.01,
+   "townPerUnit": 0.02,
    "recoverSeconds": 30,
    "minMult": 0.25,
    "maxMult": 4
+  },
+  "drift": {
+   "amp": 0.15,
+   "tauSeconds": 120,
+   "sigma": 0.03
   }
  },
  "routeMode": "loop",
@@ -26,51 +32,63 @@
  "goods": {
   "apples": {
    "name": "Apples",
-   "icon": "🍎"
+   "icon": "🍎",
+   "size": 1
   },
   "wheat": {
    "name": "Wheat",
-   "icon": "🌾"
+   "icon": "🌾",
+   "size": 2
   },
   "bread": {
    "name": "Bread",
-   "icon": "🍞"
+   "icon": "🍞",
+   "size": 1
   },
   "milk": {
    "name": "Milk",
-   "icon": "🥛"
+   "icon": "🥛",
+   "size": 1
   },
   "cheese": {
    "name": "Cheese",
-   "icon": "🧀"
+   "icon": "🧀",
+   "size": 2
   },
   "wool": {
    "name": "Wool",
-   "icon": "🧶"
+   "icon": "🧶",
+   "size": 2
   },
   "cloth": {
    "name": "Cloth",
-   "icon": "👘"
+   "icon": "👘",
+   "size": 1
   },
   "iron": {
    "name": "Iron",
-   "icon": "🪨"
+   "icon": "🪨",
+   "size": 3
   },
   "tools": {
    "name": "Tools",
-   "icon": "🔨"
+   "icon": "🔨",
+   "size": 2
   },
   "fish": {
    "name": "Fish",
-   "icon": "🐟"
+   "icon": "🐟",
+   "size": 1
   },
   "salt": {
    "name": "Salt",
-   "icon": "🧂"
+   "icon": "🧂",
+   "size": 1
   },
   "wine": {
    "name": "Wine",
-   "icon": "🍷"
+   "icon": "🍷",
+   "size": 1
   }
  },
  "towns": {
@@ -388,7 +406,7 @@
    "name": "Bigger pack",
    "icon": "🎒",
    "cost": 25,
-   "desc": "Carry 5 goods instead of 3.",
+   "desc": "Carry 5 slots of goods instead of 3.",
    "capacity": 5
   },
   {
@@ -396,8 +414,17 @@
    "name": "Sturdy boots",
    "icon": "🥾",
    "cost": 40,
-   "desc": "Walk 30% faster.",
+   "desc": "Walk 30% faster in town.",
    "speed": 1.3
+  },
+  {
+   "id": "barrow",
+   "name": "Wheelbarrow",
+   "icon": "🛞",
+   "cost": 70,
+   "desc": "Carry 8 slots.",
+   "capacity": 8,
+   "needs": "pack"
   },
   {
    "id": "orders",
@@ -408,12 +435,49 @@
    "orders": true
   },
   {
+   "id": "boots2",
+   "name": "Fine boots",
+   "icon": "👢",
+   "cost": 120,
+   "desc": "Walk 25% faster again.",
+   "speed": 1.25,
+   "needs": "boots"
+  },
+  {
    "id": "cart",
    "name": "Cart",
    "icon": "🛒",
    "cost": 150,
-   "desc": "Carry 15 goods.",
-   "capacity": 15
+   "desc": "Carry 15 slots.",
+   "capacity": 15,
+   "needs": "barrow"
+  },
+  {
+   "id": "quick1",
+   "name": "Quick dealings I",
+   "icon": "⏱️",
+   "cost": 200,
+   "desc": "Standing orders take 40% less time at each stop.",
+   "autoWait": 0.6,
+   "needs": "orders"
+  },
+  {
+   "id": "boots3",
+   "name": "Runner's shoes",
+   "icon": "👟",
+   "cost": 350,
+   "desc": "Walk 25% faster again.",
+   "speed": 1.25,
+   "needs": "boots2"
+  },
+  {
+   "id": "bigcart",
+   "name": "Big cart",
+   "icon": "🛻",
+   "cost": 400,
+   "desc": "Carry 22 slots.",
+   "capacity": 22,
+   "needs": "cart"
   },
   {
    "id": "horse",
@@ -433,20 +497,32 @@
    "needs": "horse"
   },
   {
+   "id": "quick2",
+   "name": "Quick dealings II",
+   "icon": "⏱️",
+   "cost": 900,
+   "desc": "Standing orders take 70% less time at each stop.",
+   "autoWait": 0.3,
+   "needs": "quick1"
+  },
+  {
    "id": "wagon",
    "name": "Wagon",
    "icon": "🚚",
    "cost": 1500,
-   "desc": "Carry 40 goods.",
+   "desc": "Carry 40 slots.",
    "capacity": 40,
-   "needs": "horse"
+   "needs": [
+    "bigcart",
+    "horse"
+   ]
   },
   {
    "id": "mgmt1",
    "name": "Management I",
    "icon": "📒",
    "cost": 1500,
-   "desc": "Hire 1 merchant to ride a route of up to 2 towns on standing orders.",
+   "desc": "Hire 1 merchant. They ride land routes of up to 2 towns on standing orders, with your carrying capacity and speed.",
    "needs": "horse",
    "management": {
     "level": 1,
@@ -455,15 +531,51 @@
    }
   },
   {
+   "id": "courser",
+   "name": "Courser",
+   "icon": "🏇",
+   "cost": 3000,
+   "desc": "Ride 35% faster again.",
+   "rideSpeed": 1.35,
+   "needs": "swift"
+  },
+  {
+   "id": "quick3",
+   "name": "Quick dealings III",
+   "icon": "⚡",
+   "cost": 4000,
+   "desc": "Standing orders finish almost instantly.",
+   "autoWait": 0.02,
+   "needs": "quick2"
+  },
+  {
+   "id": "freight",
+   "name": "Freight wagon",
+   "icon": "🚛",
+   "cost": 8000,
+   "desc": "Carry 80 slots.",
+   "capacity": 80,
+   "needs": "wagon"
+  },
+  {
+   "id": "champion",
+   "name": "Champion steed",
+   "icon": "🐴",
+   "cost": 12000,
+   "desc": "Ride 30% faster again.",
+   "rideSpeed": 1.3,
+   "needs": "courser"
+  },
+  {
    "id": "mgmt2",
    "name": "Management II",
    "icon": "📗",
-   "cost": 6000,
-   "desc": "Up to 3 merchants, routes of up to 3 towns. Unlocks instruction blocks: buy and sell amounts, If price, Spend what you earned.",
+   "cost": 20000,
+   "desc": "A 2nd merchant slot, routes of up to 3 towns. Unlocks instruction blocks: buy and sell amounts, If price, Spend earnings.",
    "needs": "mgmt1",
    "management": {
     "level": 2,
-    "hires": 3,
+    "hires": 2,
     "stops": 3
    }
   },
@@ -471,12 +583,12 @@
    "id": "mgmt3",
    "name": "Management III",
    "icon": "📘",
-   "cost": 25000,
-   "desc": "Up to 6 merchants, routes of up to 5 towns. Unlocks Wait a day and If the price dropped.",
+   "cost": 150000,
+   "desc": "A 3rd merchant slot, routes of up to 5 towns. Unlocks Wait and If the price dropped or rose.",
    "needs": "mgmt2",
    "management": {
     "level": 3,
-    "hires": 6,
+    "hires": 3,
     "stops": 5
    }
   }
@@ -484,7 +596,7 @@
  "achievements": {
   "firstProfit": {
    "name": "First Coin Made",
-   "desc": "Finished a route with more coins than you started."
+   "desc": "Made your first sale."
   },
   "horseBeforeCart": {
    "name": "Horse Before Cart",
@@ -502,7 +614,6 @@
  "hiring": {
   "baseCost": 1200,
   "costGrowth": 1.9,
-  "capacity": 15,
   "names": [
    "Ada",
    "Bram",
@@ -527,5 +638,6 @@
   "cmpTrend": 3,
   "maxDepth": 2,
   "maxBlocks": 12
- }
+ },
+ "handStay": 1
 }
